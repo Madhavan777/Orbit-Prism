@@ -21,19 +21,21 @@ and memory constraints, evaluated on held-out events. It does not run on flight 
 
 from __future__ import annotations
 
+import binascii
 import math
 import struct
-import zlib
 from typing import Dict, List, Optional, Tuple, NamedTuple
 import numpy as np
 import pandas as pd
 
 from src.constants import (
     CLOUD_SWITCH,
+    EVENT_INDEX,
     L0_B,
     L1_BYTES,
     OPTICAL_B,
     PASS_BYTES,
+    QUEUE_ENTRY_B,
     RADAR_B,
 )
 from src.evaluation.reference_policies import NotAvailable
@@ -53,6 +55,22 @@ KEY = ["chip", "row", "col"]
 FIXED_THRESHOLD = 0.5
 
 
+ALERT_FORMAT = ">BBIBBBBHHHHIIIH"   # big-endian, exactly 32 bytes (checked below and in tests)
+ALERT_VERSION = 1
+assert struct.calcsize(ALERT_FORMAT) == L0_B == 32
+
+
+def _chip_fields(chip: str) -> Tuple[int, int]:
+    """(event index, chip number) for a chip id '<Event>_<number>', for example 'Sri-Lanka_1049830'.
+
+    Lossless for every Sen1Floods11 chip. The earlier 16-byte text field truncated the two 17-character
+    Sri-Lanka ids. An unknown name gives (255, 0)."""
+    event, _, number = chip.rpartition("_")
+    if event in EVENT_INDEX and number.isdigit() and int(number) < 2 ** 32:
+        return EVENT_INDEX.index(event), int(number)
+    return 255, 0
+
+
 def build_l0_alert_packet(
     chip: str,
     row: int,
@@ -65,49 +83,53 @@ def build_l0_alert_packet(
     hazard_type: int = 0,
 ) -> bytes:
     """
-    Constructs an exact 32-byte binary L0 emergency alert packet.
-    
-    Binary Layout (Big-Endian, 32 bytes exact):
-      - 16s: chip identifier (ASCII / UTF-8, null-padded/truncated) -> 16 bytes
-      - B:   row index (0..3)                                       -> 1 byte
-      - B:   col index (0..3)                                       -> 1 byte
-      - B:   sensor flag (0 = optical, 1 = radar)                   -> 1 byte
-      - B:   hazard type (0 = flood, 1 = fire)                      -> 1 byte
-      - H:   quantized p_flood (uint16, 0..65535)                   -> 2 bytes
-      - H:   quantized extent (uint16, 0..65535)                    -> 2 bytes
-      - H:   pass number (uint16)                                   -> 2 bytes
-      - I:   sequence / timestamp (uint32)                          -> 4 bytes
-      - H:   checksum (CRC-16 over first 30 bytes)                  -> 2 bytes
-    Total: 16 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 4 + 2 = 32 bytes.
-    """
-    chip_bytes = chip.encode("ascii", "replace")[:16].ljust(16, b"\x00")
-    r = int(row) & 0xFF
-    c = int(col) & 0xFF
-    s_flag = 1 if sensor == "radar" else 0
-    h_type = int(hazard_type) & 0xFF
-    q_p = int(np.clip(p_flood, 0.0, 1.0) * 65535) & 0xFFFF
-    q_ext = int(np.clip(extent, 0.0, 1.0) * 65535) & 0xFFFF
-    p_num = int(pass_number) & 0xFFFF
-    seq_num = int(seq) & 0xFFFFFFFF
+    Constructs the exact 32-byte binary L0 alert (big-endian, struct format ALERT_FORMAT).
 
-    header = struct.pack(
-        ">16sBBBBHHHI",
-        chip_bytes,
-        r,
-        c,
-        s_flag,
-        h_type,
-        q_p,
-        q_ext,
-        p_num,
-        seq_num,
+      offset  size  field
+         0     B    version (1)
+         1     B    event index (EVENT_INDEX; 255 = unknown)
+         2     I    chip number (the digits of '<Event>_<number>')
+         6     B    tile row
+         7     B    tile column
+         8     B    sensor (0 optical, 1 radar)
+         9     B    hazard (0 flood, 1 fire)
+        10     H    flood probability, x 65535
+        12     H    extent, x 65535
+        14     H    priority (probability x extent), x 65535
+        16     H    pass number
+        18     I    sequence number
+        22     I    size of the full tile (L2) in bytes
+        26     I    reserved (0)
+        30     H    CRC-16/XMODEM (binascii.crc_hqx) over the first 30 bytes
+    Decode with decode_l0_alert_packet.
+    """
+    event, number = _chip_fields(chip)
+    q = lambda v: int(round(float(np.clip(v, 0.0, 1.0)) * 65535))  # noqa: E731
+    radar = sensor == "radar"
+    body = struct.pack(
+        ALERT_FORMAT[:-1], ALERT_VERSION, event, number, int(row) & 0xFF, int(col) & 0xFF,
+        1 if radar else 0, int(hazard_type) & 0xFF, q(p_flood), q(extent), q(float(p_flood) * float(extent)),
+        int(pass_number) & 0xFFFF, int(seq) & 0xFFFFFFFF, RADAR_B if radar else OPTICAL_B, 0,
     )
-    # 16-bit CRC checksum
-    crc16 = zlib.crc32(header) & 0xFFFF
-    packet = header + struct.pack(">H", crc16)
+    packet = body + struct.pack(">H", binascii.crc_hqx(body, 0))
     assert len(packet) == L0_B == 32, f"L0 packet size mismatch: {len(packet)} != 32"
     return packet
 
+
+def decode_l0_alert_packet(packet: bytes) -> Dict[str, object]:
+    """Inverse of build_l0_alert_packet (ground side). Raises ValueError on a wrong size or checksum."""
+    if len(packet) != L0_B:
+        raise ValueError(f"an alert is {L0_B} bytes, got {len(packet)}")
+    ver, ev, num, row, col, sensor, hazard, p, ext, prio, pas, seq, l2, _, crc = struct.unpack(ALERT_FORMAT, packet)
+    if crc != binascii.crc_hqx(packet[:30], 0):
+        raise ValueError("alert checksum mismatch")
+    event = EVENT_INDEX[ev] if ev < len(EVENT_INDEX) else None
+    return {
+        "version": ver, "event": event, "chip_number": num, "chip": f"{event}_{num}" if event else None,
+        "row": row, "col": col, "sensor": "radar" if sensor else "optical", "hazard": "fire" if hazard else "flood",
+        "p_flood": p / 65535, "extent": ext / 65535, "priority": prio / 65535,
+        "pass_number": pas, "seq": seq, "l2_bytes": l2,
+    }
 
 class PacketItem(NamedTuple):
     idx: int
@@ -127,7 +149,7 @@ def _tile_bytes(sensor: pd.Series) -> np.ndarray:
 def _pack_queue_into_passes(
     packets: List[PacketItem],
     budget_bytes: float,
-) -> Tuple[pd.DataFrame, int]:
+) -> Tuple[pd.DataFrame, int, int]:
     """
     Packs a discrete queue of packets into communication passes of size budget_bytes.
     
@@ -141,7 +163,7 @@ def _pack_queue_into_passes(
         empty_df = pd.DataFrame(
             columns=["order", "chip", "row", "col", "layer", "bytes", "cum_bytes", "pass_index"]
         )
-        return empty_df, 0
+        return empty_df, 0, 0
 
     if budget_bytes <= 0:
         raise ValueError(f"budget_bytes must be positive, got {budget_bytes}")
@@ -154,7 +176,7 @@ def _pack_queue_into_passes(
 
     # Total queue size in bytes
     queue_bytes = sum(p.nbytes for p in packets)
-    peak_queue_bytes = queue_bytes
+    peak_queue_payload_bytes = queue_bytes   # payload waiting in FLASH, not SRAM
 
     i = 0
     n = len(packets)
@@ -208,7 +230,7 @@ def _pack_queue_into_passes(
                 current_pass_bytes = 0.0
 
     df_out = pd.DataFrame(records)
-    return df_out, peak_queue_bytes
+    return df_out, len(packets), peak_queue_payload_bytes
 
 
 def run(
@@ -232,7 +254,10 @@ def run(
         order, chip, row, col, layer, bytes, cum_bytes, pass_index
     - attrs:
         log.attrs["coverage_bitmap_bytes"] = ceil(n_tiles / 8)
-        log.attrs["peak_queue_bytes"] = peak memory of pending queue in bytes
+        log.attrs["peak_queue_bytes"]         = SRAM used by the pending queue: peak entries x QUEUE_ENTRY_B
+                                                (the queue holds references; pixels stay in flash)
+        log.attrs["peak_queue_payload_bytes"] = payload bytes waiting in flash (NOT SRAM)
+        log.attrs["onboard_scheduler_bytes"]  = peak_queue_bytes + coverage_bitmap_bytes
     """
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
@@ -250,6 +275,8 @@ def run(
         )
         empty.attrs["coverage_bitmap_bytes"] = 0
         empty.attrs["peak_queue_bytes"] = 0
+        empty.attrs["peak_queue_payload_bytes"] = 0
+        empty.attrs["onboard_scheduler_bytes"] = 0
         return empty
 
     sensor = tiles["sensor_used"]
@@ -339,6 +366,8 @@ def run(
             )
             empty.attrs["coverage_bitmap_bytes"] = coverage_bitmap_bytes
             empty.attrs["peak_queue_bytes"] = 0
+            empty.attrs["peak_queue_payload_bytes"] = 0
+            empty.attrs["onboard_scheduler_bytes"] = coverage_bitmap_bytes
             return empty
 
         # Stage 1: L0 Alerts ranked by priority descending (stable tie-break)
@@ -371,8 +400,12 @@ def run(
         packets = l0_packets + l1_packets + l2_packets
 
     # Pack into discrete communication passes
-    log_df, peak_queue = _pack_queue_into_passes(packets, budget_bytes)
+    log_df, peak_entries, payload_bytes = _pack_queue_into_passes(packets, budget_bytes)
     log_df.attrs["coverage_bitmap_bytes"] = coverage_bitmap_bytes
-    log_df.attrs["peak_queue_bytes"] = peak_queue
+    # Conservative: every packet is enqueued before the first pass. The queue holds references, so its SRAM cost
+    # is entries x QUEUE_ENTRY_B; the payload (pixels) waits in flash.
+    log_df.attrs["peak_queue_bytes"] = peak_entries * QUEUE_ENTRY_B
+    log_df.attrs["peak_queue_payload_bytes"] = payload_bytes
+    log_df.attrs["onboard_scheduler_bytes"] = peak_entries * QUEUE_ENTRY_B + coverage_bitmap_bytes
 
     return log_df

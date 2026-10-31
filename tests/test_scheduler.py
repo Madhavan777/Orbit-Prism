@@ -87,6 +87,40 @@ def test_l0_alert_struct_exact_32_bytes():
     assert len(pkt) == 32
     assert len(pkt) == L0_B
 
+    from src.scheduler.sim import decode_l0_alert_packet
+    d = decode_l0_alert_packet(pkt)
+    assert (d["chip"], d["row"], d["col"], d["sensor"], d["hazard"]) == ("Bolivia_129334", 2, 3, "radar", "flood")
+    assert d["pass_number"] == 1 and d["seq"] == 104 and d["l2_bytes"] == 32768
+    assert abs(d["p_flood"] - 0.875) < 1e-4 and abs(d["extent"] - 0.654) < 1e-4
+    assert abs(d["priority"] - 0.875 * 0.654) < 1e-4
+
+
+def test_alert_checksum_is_a_real_crc16_and_detects_corruption():
+    import binascii
+    from src.scheduler.sim import decode_l0_alert_packet
+    pkt = build_l0_alert_packet("Ghana_5079", 1, 1, "optical", 0.3, 0.2)
+    assert int.from_bytes(pkt[30:], "big") == binascii.crc_hqx(pkt[:30], 0)     # CRC-16/XMODEM
+    for i in (0, 5, 12, 29):                                                    # flip one bit anywhere in the body
+        bad = bytearray(pkt)
+        bad[i] ^= 0x01
+        with pytest.raises(ValueError, match="checksum"):
+            decode_l0_alert_packet(bytes(bad))
+    with pytest.raises(ValueError, match="32 bytes"):
+        decode_l0_alert_packet(pkt[:31])
+
+
+def test_every_real_chip_id_survives_the_alert_unchanged():
+    """The old 16-byte text field truncated the two 17-character Sri-Lanka ids."""
+    from pathlib import Path
+    from src.scheduler.sim import decode_l0_alert_packet
+    base = pd.read_csv(Path(__file__).resolve().parent.parent / "data" / "tiles_base.csv")
+    chips = base["chip"].drop_duplicates().tolist()
+    assert max(len(c) for c in chips) > 16                     # the case this test exists for
+    decoded = [decode_l0_alert_packet(build_l0_alert_packet(c, 0, 0, "optical", 0.5, 0.5))["chip"] for c in chips]
+    assert decoded == chips
+    assert len(set(decoded)) == len(chips) == 441              # lossless and no collisions
+    assert decode_l0_alert_packet(build_l0_alert_packet("uploaded", 0, 0, "optical", 0.5, 0.5))["chip"] is None
+
 
 def test_scheduler_determinism():
     """Verify that sim.run is strictly deterministic across runs."""
@@ -238,6 +272,19 @@ def test_coverage_bitmap_and_peak_queue_attrs():
     assert log.attrs["peak_queue_bytes"] > 0
 
 
+def test_queue_memory_counts_references_not_payload():
+    """peak_queue_bytes is SRAM (entries x QUEUE_ENTRY_B); the payload waiting in flash is reported separately."""
+    from src.constants import QUEUE_ENTRY_B, SRAM_BYTES
+    tiles = _make_sample_tiles(40)
+    log = sim_run(tiles, "orbit_prism", budget_bytes=200_000, thresholds={"optical": 0.0, "radar": 0.0})
+    entries = len(log)                                   # every packet is enqueued before the first pass
+    assert log.attrs["peak_queue_bytes"] == entries * QUEUE_ENTRY_B
+    assert log.attrs["peak_queue_payload_bytes"] == pytest.approx(log["bytes"].sum())
+    assert log.attrs["peak_queue_payload_bytes"] > 100 * log.attrs["peak_queue_bytes"]
+    assert log.attrs["onboard_scheduler_bytes"] == log.attrs["peak_queue_bytes"] + log.attrs["coverage_bitmap_bytes"]
+    assert log.attrs["onboard_scheduler_bytes"] < SRAM_BYTES * 0.01     # a sliver of the 4.2 MB, not 9 MB
+
+
 def test_empty_and_tiny_budgets():
     """Verify that empty inputs and small budgets behave safely without crashing."""
     empty_tiles = pd.DataFrame(columns=[
@@ -248,6 +295,7 @@ def test_empty_and_tiny_budgets():
     assert log.empty
     assert log.attrs["coverage_bitmap_bytes"] == 0
     assert log.attrs["peak_queue_bytes"] == 0
+    assert log.attrs["peak_queue_payload_bytes"] == 0 and log.attrs["onboard_scheduler_bytes"] == 0
 
     # Negative or zero budget should raise ValueError
     tiles = _make_sample_tiles(4)

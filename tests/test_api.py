@@ -112,12 +112,11 @@ def test_triage_falls_back_to_stored_scores_without_pixels(client, project):
 
 def test_alert_packet_is_the_schedulers_32_bytes_and_decodes():
     pkt = pack_alert("Bolivia_1", 2, 3, "radar", 0.5, 0.25)
-    assert len(pkt) == 32 == struct.calcsize(">16sBBBBHHHIH")
-    chip, row, col, sensor, hazard, p, e, pas, seq, crc = struct.unpack(">16sBBBBHHHIH", pkt)
-    assert chip.rstrip(b"\x00") == b"Bolivia_1" and (row, col, sensor, hazard) == (2, 3, 1, 0)  # radar, flood
-    assert abs(p / 65535 - 0.5) < 1e-4 and abs(e / 65535 - 0.25) < 1e-4 and (pas, seq) == (0, 0)
-    assert crc == zlib.crc32(pkt[:30]) & 0xFFFF
-    from src.scheduler.sim import build_l0_alert_packet
+    from src.scheduler.sim import build_l0_alert_packet, decode_l0_alert_packet
+    assert len(pkt) == 32
+    d = decode_l0_alert_packet(pkt)                                   # also verifies the checksum
+    assert (d["chip"], d["row"], d["col"], d["sensor"], d["hazard"]) == ("Bolivia_1", 2, 3, "radar", "flood")
+    assert abs(d["p_flood"] - 0.5) < 1e-4 and abs(d["extent"] - 0.25) < 1e-4 and d["l2_bytes"] == 32768
     assert pkt == build_l0_alert_packet("Bolivia_1", 2, 3, "radar", 0.5, 0.25)     # one definition of the packet
 
 

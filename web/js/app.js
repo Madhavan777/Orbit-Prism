@@ -114,8 +114,9 @@ async function selectTile(id) {
 }
 
 function hexBytes(hex) {
-  // layout from src/scheduler/sim.py: chip id 0-15, row/col/sensor/hazard 16-19, scores 20-23, pass+sequence 24-29, checksum 30-31
-  const cls = (i) => (i < 16 ? "h1" : i < 20 ? "h2" : i < 24 ? "h0" : i < 30 ? "h3" : "h1");
+  // layout from src/scheduler/sim.py: version+event+chip number 0-5, row/col/sensor/hazard 6-9, probability/extent/priority 10-15,
+  // pass+sequence+tile size+reserved 16-29, CRC-16 30-31
+  const cls = (i) => (i < 6 ? "h1" : i < 10 ? "h2" : i < 16 ? "h0" : i < 30 ? "h3" : "h1");
   let h = "";
   for (let i = 0; i < hex.length / 2; i++) h += `<span class="${cls(i)}">${hex.substr(i * 2, 2)}</span>`;
   return h;
@@ -141,7 +142,7 @@ function renderDetail(r, el, withImages) {
       <dt>Score from</dt><dd>${esc(r.score_source)}</dd></dl>
     <div class="small muted">The ${r.alert_bytes}-byte alert sent before any tile:</div>
     <div class="hex" aria-label="Alert packet in hexadecimal">${hexBytes(r.alert_hex)}</div>
-    <div class="small muted"><span style="color:var(--lav)">chip id, checksum</span> · <span style="color:var(--lav2)">row, column, sensor, hazard</span> · <span style="color:var(--lemon)">flood probability, extent</span> · <span>pass, sequence</span></div>
+    <div class="small muted"><span style="color:var(--lav)">event, chip number, checksum</span> · <span style="color:var(--lav2)">row, column, sensor, hazard</span> · <span style="color:var(--lemon)">probability, extent, priority</span> · <span>pass, sequence, tile size</span></div>
     ${r.score_source === "stored score" ? `<div class="notice">The ${esc(r.routed_to)} model could not be run here (no model file or no pixels for this tile on this machine), so the stored score is shown instead of a live model output.</div>` : ""}
     ${r.synthetic ? `<div class="notice">Placeholder mode: the dial thresholds come from synthetic scores, so this decision shows the plumbing, not a result.</div>` : ""}`;
 }
