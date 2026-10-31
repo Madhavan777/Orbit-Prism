@@ -37,6 +37,13 @@ Design notes:
 - Official train/valid/test are chip-level splits across events; only Bolivia is a held-out event (`holdout`). Report held-out-event results on Bolivia.
 - `CRITICAL_THRESHOLD` = 0.30 is a named constant so the 5% sensitivity analysis is a one-line change.
 
+## Locked decisions (Madhavan, branch madhavan/eval)
+
+1. **Test event = Bolivia** (`split == "holdout"`: 15 chips, 231 tiles). Train on `train`, calibrate on `valid`, never tune on `holdout`. The chip-level `test` split is not the headline test set.
+2. **Optical model trains on tiles with `cloud_frac < 0.5` and scores all tiles.** The radar model trains on all tiles.
+3. **Headline recall = full-tile recall** (critical tiles delivered as full tiles vs cumulative MB sent; this is the main plot). Alert recall (critical tiles alerted by an L0 packet) is reported as a separate metric, never mixed into the main plot.
+4. **Phase 2 length is 17 hours, not 36.** Slides, speech and the plan must say 17 hours. Checkpoints: hour 8 merge, hour 12 feature freeze, hour 14 code freeze.
+
 ## Claims policy
 
 Never say "outperforms", "guarantees" (without "holds when test data resembles calibration data"), "real-time on satellite hardware" or "danger score". All results are "to be measured". Do not claim tiling or cloud filtering is new.

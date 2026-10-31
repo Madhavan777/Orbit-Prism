@@ -1,7 +1,7 @@
 """Simple baselines on data/fake_tiles.csv (synthetic scores; placeholder numbers).
 
 All systems send whole tiles and share one byte budget per pass (19.2 MB).
-Evaluated on the non-train tiles (valid + test + holdout).
+Evaluated on the held-out test event only (split == "holdout", Bolivia).
 
 1 capture order      - tiles in file order, optical payload
 2 discard cloudy     - drop tiles with cloud_frac >= 0.5, then capture order
@@ -21,6 +21,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "data" / "fake_tiles.csv"
+TEST_SPLIT = "holdout"  # Bolivia, the held-out test event (locked in CONTEXT.md)
 PASS_BYTES = 19_200_000
 OPTICAL_B, RADAR_B = 65_536, 32_768
 CLOUD_SWITCH = 0.5
@@ -28,7 +29,7 @@ CLOUD_SWITCH = 0.5
 
 def load():
     with open(SRC, newline="") as f:
-        rows = [r for r in csv.DictReader(f) if r["split"] != "train"]
+        rows = [r for r in csv.DictReader(f) if r["split"] == TEST_SPLIT]
     return {
         "crit": np.array([int(r["critical"]) for r in rows]),
         "cloud": np.array([float(r["cloud_frac"]) for r in rows]),
