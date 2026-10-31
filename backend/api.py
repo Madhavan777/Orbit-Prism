@@ -460,7 +460,11 @@ def create_app(root: Path = ROOT) -> FastAPI:
                 raise HTTPException(409, str(e))
         thr = S.thresholds(body.alpha)
         # never below one full tile: a tile is not split across passes, so a smaller pass could carry nothing whole
-        budget = max(body.scaled_fraction * len(sel) * OPTICAL_B, OPTICAL_B)
+        # and never above one real pass: the link cannot carry more than 19.2 MB per pass (this is link capacity;
+        # the 4.2 MB limit is on-board memory, a different thing)
+        wanted = body.scaled_fraction * len(sel) * OPTICAL_B
+        budget = min(max(wanted, OPTICAL_B), PASS_BYTES)
+        capped = wanted > PASS_BYTES
         sel = sel.reset_index(drop=True)
         out, skipped = {}, {}
         for pol in body.policies:
@@ -492,12 +496,14 @@ def create_app(root: Path = ROOT) -> FastAPI:
         return _clean({"synthetic": S.synthetic, "selection": {"split": body.split, "event": body.event, "chip": body.chip,
                                                                "tiles": len(sel), "critical": int(sel["critical"].sum())},
                        "alpha": body.alpha, "thresholds": thr, "scaled_budget_MB": budget / 1e6,
-                       "scaled_fraction": body.scaled_fraction,
+                       "scaled_fraction": body.scaled_fraction, "budget_capped_at_real_pass": capped,
+                       "selection_volume_MB": len(sel) * OPTICAL_B / 1e6,
                        "weather": {"cloud_seed": seed, "redrawn": body.redraw_clouds,
                                    "mean_cloud": float(sel["cloud_frac"].mean()),
                                    "radar_routed": int((sel["sensor_used"] == "radar").sum())},
                        "dial": [_dial_row(sel, path, thr[path], body.alpha) for path in ("optical", "radar")],
-                       "scaled_note": f"scaled pass = {body.scaled_fraction:.0%} of the selection's all-optical volume, not the real 19.2 MB pass",
+                       "scaled_note": (f"scaled pass = {body.scaled_fraction:.0%} of the selection's all-optical volume ({len(sel) * OPTICAL_B / 1e6:.1f} MB)"
+                                       + (", capped at the real 19.2 MB pass" if capped else ", below the real 19.2 MB pass")),
                        "systems": out, "skipped": skipped})
 
     @app.get("/api/demo-case")

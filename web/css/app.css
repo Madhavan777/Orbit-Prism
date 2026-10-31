@@ -191,7 +191,7 @@ tr.nextpass td { color: var(--muted); }
 .queue { max-height: 320px; overflow-y: auto; }
 .pill.L0, .pill.L1, .pill.L2 { font-size: .68rem; padding: 1px 8px; }
 .pill.L0 { color: var(--lime); border-color: var(--lime); } .pill.L1 { color: var(--ice); } .pill.L2 { color: var(--ink2); }
-.chart svg { width: 100%; height: auto; display: block; }
+.chart > svg { width: 100%; height: auto; display: block; }
 .chart .grid { stroke: var(--line); stroke-width: 1; } .chart .tick { fill: var(--muted); font-size: 11px; }
 .chart .axis { fill: var(--ink2); font-size: 12px; } .chart .scaled { stroke: var(--ink2); stroke-width: 1; opacity: .7; }
 .chart .direct { fill: var(--ink); font: 700 12px var(--font); }

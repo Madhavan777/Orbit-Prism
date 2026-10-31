@@ -57,11 +57,16 @@ def has_imagery(root: Path, chip: str) -> bool:
 
 @functools.lru_cache(maxsize=1)
 def _real_cloud_structure(root_str: str):
-    """(billow, shading) maps, 512x512 and zero-mean unit-variance, measured on real clouds in the dataset.
+    """(billow, fine, mid) maps, 512x512 and zero-mean unit-variance, measured on real clouds in the dataset.
 
-    billow is the cloud's own opacity pattern (blue-band reflectance, band-passed to lumps 3 to 30 px across);
-    shading is the same for brightness. Returns [] when none of the source chips is on disk.
+    billow is the cloud's own opacity pattern (blue-band reflectance, lumps 3 to 30 px across); fine and mid are the
+    brightness texture of the cloud itself at two scales, weighted by real cloud opacity so ground detail seen through
+    thin cloud does not leak in. Returns [] when none of the source chips is on disk.
     """
+    def band(x, lo, hi):
+        b = gaussian_filter(x, lo) - gaussian_filter(x, hi)
+        return b / (b.std() + 1e-6)
+
     out = []
     for c in CLOUD_SOURCE_CHIPS:
         path = _hand_dir(Path(root_str)) / "S2Hand" / f"{c}_S2Hand.tif"
@@ -69,12 +74,9 @@ def _real_cloud_structure(root_str: str):
             continue
         a = np.nan_to_num(tifffile.imread(path)).astype(np.float32)
         opac = np.clip((a[1] - 700.0) / 2100.0, 0.0, 1.0)           # blue reflectance: clouds are bright, ground is dark
-        lum = np.clip(a[[3, 2, 1]].mean(0) / 3000.0, 0.0, 1.0) ** 0.75
-        maps = []
-        for m in (opac, lum):
-            band = gaussian_filter(m, 2.5) - gaussian_filter(m, 30)
-            maps.append(band / (band.std() + 1e-6))
-        out.append(tuple(maps))
+        lum = np.clip(a[[3, 2, 1]].mean(0) / 3000.0, 0.0, 1.0) ** 0.7
+        w = gaussian_filter((opac > 0.6).astype(np.float32), 3)
+        out.append((band(opac, 2.5, 30), band(lum, 1.2, 6) * w, band(lum, 6, 30) * w))
     return out
 
 
@@ -92,17 +94,18 @@ def _paint_clouds(root_str: str, chip: str, rgb_clear: np.ndarray) -> np.ndarray
         op = gaussian_filter(mask, 3.0)[..., None]
         return rgb_clear * (1.0 - op) + np.array([0.95, 0.965, 0.985], dtype=np.float32) * op
     rng = np.random.default_rng(int(hashlib.sha256(chip.encode()).hexdigest()[:8], 16))
-    billow, shade = lib[int(rng.integers(len(lib)))]
+    billow, fine, mid = lib[int(rng.integers(len(lib)))]
     k = int(rng.integers(4))
-    billow, shade = np.rot90(billow, k), np.rot90(shade, k)
+    billow, fine, mid = np.rot90(billow, k), np.rot90(fine, k), np.rot90(mid, k)
     if rng.random() < 0.5:
-        billow, shade = billow[:, ::-1], shade[:, ::-1]
+        billow, fine, mid = billow[:, ::-1], fine[:, ::-1], mid[:, ::-1]
     band = np.clip(1.0 - np.abs(2.0 * gaussian_filter(mask, 16) - 1.0), 0.0, 1.0)     # strongest near cloud edges
-    op = _smoothstep(gaussian_filter(mask, 5) + 0.20 * billow * (0.4 + band), 0.18, 0.82)
+    op = _smoothstep(gaussian_filter(mask, 5) + 0.22 * billow * (0.4 + band), 0.18, 0.82)
     op = np.maximum(op, _smoothstep(gaussian_filter(mask, 9), 0.82, 0.95))          # solid core: nothing shows through
     body = gaussian_filter(op, 12)[..., None]
-    cloud = np.clip(np.array([0.95, 0.965, 0.985], dtype=np.float32) * (0.84 + 0.16 * body) + 0.045 * shade[..., None]
-                    - 0.05 * (1.0 - body) * np.array([0.5, 0.4, 0.2], dtype=np.float32), 0.0, 1.0)
+    cloud = np.array([0.965, 0.975, 0.99], dtype=np.float32) * (0.80 + 0.20 * body)
+    cloud = cloud + 0.075 * mid[..., None] + 0.045 * fine[..., None]
+    cloud = np.clip(cloud - 0.10 * (1.0 - body) * np.array([0.6, 0.45, 0.25], dtype=np.float32), 0.0, 1.0)
     shadow = gaussian_filter(shift(op, (12, -12), order=1, mode="constant"), 6) * (1.0 - op)   # cast shadow on the ground
     ground = rgb_clear * (1.0 - 0.45 * shadow[..., None])
     return ground * (1.0 - op[..., None]) + cloud * op[..., None]

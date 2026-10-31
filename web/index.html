@@ -156,8 +156,9 @@
     <p class="lead">Each run draws new simulated clouds over the chosen event and re-runs the optical model on the new pixels, so routing, scores and recall all change, as they would on a different day. The flood and its labels stay real. Seed 42 reproduces the measured result below. The line on the chart is the scaled pass, not the real 19.2 MB pass.</p>
     <div class="controls-bar">
       <div class="field"><span>SCOPE</span><select id="scope"><option value="event">selected event</option><option value="chip">selected chip</option></select></div>
-      <div class="field grow"><span>PASS BUDGET: <b id="budgetLabel">20%</b> OF THE SELECTION'S DATA</span>
-        <input type="range" id="budget" min="0.05" max="1" step="0.05" value="0.2" aria-label="Pass budget as a share of the selection's data"></div>
+      <div class="field grow"><span>PASS BUDGET: <b id="budgetLabel">20%</b></span>
+        <input type="range" id="budget" min="0.05" max="1" step="0.05" value="0.2" aria-label="Pass budget as a share of the selection's data">
+        <span class="small muted" id="budgetNote" style="font-family:var(--font);letter-spacing:0"></span></div>
       <button class="btn" id="simnew" type="button">Run with new clouds</button>
       <button class="btn ghost" id="simgo" type="button">Measured clouds (seed 42)</button>
     </div>

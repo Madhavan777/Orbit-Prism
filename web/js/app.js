@@ -58,6 +58,7 @@ async function init() {
   if (s.mode === "unavailable") { $("#try").insertAdjacentHTML("afterbegin", `<div class="notice err">No results are available yet. Run <code>python scripts/evaluate.py --allow-placeholder</code> (placeholder) or follow the runbook in README.md.</div>`); return; }
 
   $("#hudTarget").textContent = ST.event;
+  updateBudgetLabel();
   ST.dial = await guard(API.dial);
   ST.demo = await API.demoCase().then((d) => (d.available ? d : null)).catch(() => null);   // the demo tile is the opening selection
   $("#dial").innerHTML = s.dial_targets.map((a) => `<button type="button" data-a="${a}" aria-pressed="${a === ST.alpha}">${Math.round(a * 100)}%</button>`).join("");
@@ -71,7 +72,8 @@ async function init() {
     document.querySelectorAll("#gridview button").forEach((x) => x.setAttribute("aria-pressed", x === b));
     paintGrid();
   });
-  $("#budget").addEventListener("input", (e) => ($("#budgetLabel").textContent = Math.round(e.target.value * 100) + "%"));
+  $("#budget").addEventListener("input", updateBudgetLabel);
+  $("#scope").addEventListener("change", updateBudgetLabel);
   $("#chip").addEventListener("change", (e) => loadTiles(e.target.value));
   $("#upcloud").addEventListener("input", (e) => ($("#upcloudv").textContent = Math.round(e.target.value * 100) + "%"));
   $("#upgo").addEventListener("click", uploadTile);
@@ -80,6 +82,20 @@ async function init() {
   setAlpha(ST.alpha, true);
   loadChips();
   loadResults();
+}
+
+/* The pass budget is link capacity (a real pass carries 19.2 MB); the 4.2 MB figure is on-board memory, a separate limit. */
+function updateBudgetLabel() {
+  const s = ST.status; if (!s) return;
+  const per = s.packets.L2_optical, ev = s.events.find((e) => e.event === ST.event);
+  const n = $("#scope").value === "chip" ? ST.tiles.length : (ev ? ev.tiles : 0);
+  if (!n) return;
+  const vol = (n * per) / 1e6, real = s.link.pass_MB, slider = $("#budget");
+  slider.max = Math.min(1, real / vol).toFixed(3);                       // never above one real pass
+  if (+slider.value > +slider.max) slider.value = slider.max;
+  const mb = Math.min(vol * slider.value, real);
+  $("#budgetLabel").textContent = `${Math.round(slider.value * 100)}% = ${mb.toFixed(1)} MB`;
+  $("#budgetNote").textContent = `of this selection's ${vol.toFixed(1)} MB. A real pass carries at most ${real.toFixed(1)} MB; on-board memory (4.2 MB) is a separate limit.`;
 }
 
 function setAlpha(a, quiet) {
@@ -118,6 +134,7 @@ async function loadTiles(chip) {
   const r = await guard(() => API.tiles(chip), $("#grid"));
   if (!r) return;
   ST.tiles = r.tiles;
+  updateBudgetLabel();
   paintGrid();
   const first = (ST.demo && chip === ST.demo.chip && r.tiles.find((t) => t.tile_id === ST.demo.tile_id)) || r.tiles.find((t) => t.critical) || r.tiles[0];
   if (first) selectTile(first.tile_id);
@@ -253,7 +270,7 @@ async function runSim(opts) {
   const passes = orbit ? orbit.passes : [];
   const total = passes.reduce((a, p) => a + p.MB, 0);
   out.innerHTML = `
-    <div class="notice"><b>Cloud seed ${r.weather.cloud_seed}${r.weather.cloud_seed === 42 ? " (the measured clouds)" : ""}</b> · mean cloud ${F.pct(r.weather.mean_cloud, 0)} · ${r.weather.radar_routed} of ${r.selection.tiles} tiles routed to radar · ${r.selection.critical} critical · dial ${Math.round(r.alpha * 100)}% · ${esc(r.scaled_note)} (${r.scaled_budget_MB.toFixed(2)} MB).</div>
+    <div class="notice"><b>Cloud seed ${r.weather.cloud_seed}${r.weather.cloud_seed === 42 ? " (the measured clouds)" : ""}</b> · mean cloud ${F.pct(r.weather.mean_cloud, 0)} · ${r.weather.radar_routed} of ${r.selection.tiles} tiles routed to radar · ${r.selection.critical} critical · dial ${Math.round(r.alpha * 100)}% · ${esc(r.scaled_note)}: <b>${r.scaled_budget_MB.toFixed(2)} MB per pass</b>. This is downlink capacity; the 4.2 MB on-board memory only ever holds one 64 KiB tile at a time.</div>
     ${r.selection.critical === 0 ? `<div class="notice err">No critical tiles in this selection, so recall is undefined. Choose a chip with a ★ tile or the whole event.</div>` : ""}
     <div class="verdict">${r.dial.map(dialVerdict).join("")}</div>
     <div class="card chart" id="simchart"></div>
@@ -280,8 +297,10 @@ async function runSim(opts) {
 
 function dialVerdict(d) {
   if (!d.critical) return `<div><b>${esc(d.path)} path</b>no critical tiles on this path in this run</div>`;
+  const miss = `${d.missed} of ${d.critical} critical tiles missed = ${F.pct(d.achieved)}, target ${F.pct(d.target, 0)}.`;
+  if (d.critical < 20) return `<div><b>${esc(d.path)} path: too few tiles to judge</b>${miss} One tile is ${F.pct(1 / d.critical)}, so a promise needs at least 20 critical tiles to be checked. Choose a whole event.</div>`;
   const held = d.achieved <= d.target;
-  return `<div class="${held ? "held" : "broke"}"><b>${esc(d.path)} path: ${held ? "promise held" : "promise broken"}</b>${d.missed} of ${d.critical} critical tiles missed = ${F.pct(d.achieved)}, target ${F.pct(d.target, 0)}. One tile is ${F.pct(1 / d.critical)} here.</div>`;
+  return `<div class="${held ? "held" : "broke"}"><b>${esc(d.path)} path: ${held ? "promise held" : "promise broken"}</b>${miss} One tile is ${F.pct(1 / d.critical)} here.</div>`;
 }
 
 function addRun(r, rows) {
