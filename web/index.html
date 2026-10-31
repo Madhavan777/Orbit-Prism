@@ -453,16 +453,19 @@
     <div>
       <strong>ORBIT-PRISM // AETHER-IX</strong> · TinyML Orbital Triage System · Conscientia 2k26
     </div>
-    <div class="muted">
-      Zero external CDN · Self-contained static assets · 100% offline capable
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span class="muted">Zero external CDN · Self-contained static assets · 100% offline capable</span>
+      <a href="#top" class="hud-btn" style="text-decoration:none;">&uarr; BACK TO TOP</a>
     </div>
   </div>
 </footer>
 
 </div><!-- end content-layer -->
 
-<!-- Scripts -->
+<!-- Scripts (offline vendor libraries first, then engine, then application logic) -->
 <script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/gsap.min.js"></script>
+<script src="js/vendor/ScrollTrigger.min.js"></script>
 <script src="js/three-scene.js"></script>
 <script src="js/api.js"></script>
 <script src="js/charts.js"></script>

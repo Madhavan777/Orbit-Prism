@@ -1,7 +1,16 @@
 /**
- * Three.js 3D Orbital Intelligence Background Scene
- * Ported from AETHER-IX Orbital Intelligence
- * Renders: Persistent 3D Earth, Orbiting Satellite Assembly, Optical Laser Link & Photonic Telemetry Packets
+ * Three.js + GSAP ScrollTrigger 3D Orbital Intelligence Scene
+ * Continuous Cinematic Earth Journey across the entire mission document
+ *
+ * Choreography:
+ * - Section 1 (Hero): Earth on RIGHT, large & dominant. Satellite on left with white optical laser link.
+ * - Section 2 (The Problem): Earth shifts to CENTRE, apparent size increases, camera approaches atmosphere.
+ * - Section 3 (How It Works): Earth glides to LEFT, orbital perspective reveals the 10-step streaming pipeline.
+ * - Section 4 (Try It): Camera zooms close to delta, 3D 4x4 flood grid illuminates with Acid Lime critical markers.
+ * - Section 5 (Link Simulator): Earth shifts to RIGHT, satellite communication beams stream L0/L1/L2 packets.
+ * - Section 6 (Results): Camera pulls away, Earth becomes smaller, global telemetry and benchmark tables float cleanly.
+ * - Section 7 (Judges Q&A): High-angle orbital view reveals polar calibration ring; defense accordion.
+ * - Section 8 (Limits & Footer): Camera pulls into deep space, Earth remains visible in background down to the footer.
  */
 
 (function () {
@@ -11,6 +20,7 @@
     midnightBlack: '#05070D',
     deepNavy: '#0A1020',
     cobaltBlue: '#245BFF',
+    cobaltGlow: 'rgba(36, 91, 255, 0.65)',
     acidLime: '#C6FF00',
     white: '#F4F7FF',
     pureWhite: '#FFFFFF',
@@ -57,7 +67,8 @@
     return t * t * (3.0 - 2.0 * t);
   }
 
-  function sampleScalarSpline(values, t) {
+  // 1D Catmull-Rom cubic spline interpolation across keyframes
+  function sampleSpline(values, t) {
     var n = values.length - 1;
     var scaled = clamp(t, 0, 1) * n;
     var idx = Math.min(Math.floor(scaled), n - 1);
@@ -88,7 +99,7 @@
     return new THREE.Vector3(x, y, z);
   }
 
-  function createKaptonTextures() {
+  function createKaptonTexture() {
     var canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
@@ -101,11 +112,11 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
-    for (var i = 0; i < 600; i++) {
+    for (var i = 0; i < 700; i++) {
       var x = Math.random() * 512;
       var y = Math.random() * 512;
       var size = 8 + Math.random() * 24;
-      ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 235, 160, 0.16)' : 'rgba(90, 48, 4, 0.18)';
+      ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 235, 160, 0.2)' : 'rgba(90, 48, 4, 0.22)';
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x + size * (Math.random() - 0.3), y + size * (Math.random() - 0.3));
@@ -133,7 +144,7 @@
     return map;
   }
 
-  function createSolarPanelTexture() {
+  function createSolarTexture() {
     var canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 1024;
@@ -220,16 +231,18 @@
     dayCanvas.height = height;
     var dCtx = dayCanvas.getContext('2d');
 
+    // Rich deep-space ocean gradient
     var oceanGrad = dCtx.createLinearGradient(0, 0, 0, height);
-    oceanGrad.addColorStop(0, '#030814');
-    oceanGrad.addColorStop(0.3, '#061534');
-    oceanGrad.addColorStop(0.5, '#092456');
-    oceanGrad.addColorStop(0.7, '#061534');
-    oceanGrad.addColorStop(1, '#030814');
+    oceanGrad.addColorStop(0, '#020612');
+    oceanGrad.addColorStop(0.3, '#051332');
+    oceanGrad.addColorStop(0.5, '#082154');
+    oceanGrad.addColorStop(0.7, '#051332');
+    oceanGrad.addColorStop(1, '#020612');
     dCtx.fillStyle = oceanGrad;
     dCtx.fillRect(0, 0, width, height);
 
-    function drawPoly(ctx, poly, fill, stroke, lw) {
+    function drawPoly(ctx, poly, fill, stroke, lw, shadowColor, shadowBlur) {
+      ctx.save();
       ctx.beginPath();
       for (var i = 0; i < poly.length; i++) {
         var pt = toXY(poly[i][0], poly[i][1]);
@@ -237,15 +250,56 @@
         else ctx.lineTo(pt[0], pt[1]);
       }
       ctx.closePath();
+      if (shadowColor && shadowBlur) {
+        ctx.shadowColor = shadowColor;
+        ctx.shadowBlur = shadowBlur;
+      }
       if (fill) { ctx.fillStyle = fill; ctx.fill(); }
       if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
+      ctx.restore();
     }
 
-    drawPoly(dCtx, eurasiaPoly, '#103468', '#1C5BB8', 4);
-    drawPoly(dCtx, africaPoly, '#103468', '#1C5BB8', 4);
-    drawPoly(dCtx, indiaPolygon, '#1E3A3E', '#245BFF', 5);
+    // Continents with Electric Cobalt coastal glow
+    drawPoly(dCtx, eurasiaPoly, '#103468', '#245BFF', 6, '#245BFF', 16);
+    drawPoly(dCtx, africaPoly, '#103468', '#245BFF', 6, '#245BFF', 16);
+    drawPoly(dCtx, eurasiaPoly, '#12262B', '#1E4844', 2);
+    drawPoly(dCtx, africaPoly, '#12262B', '#1E4844', 2);
 
-    // Emissive city canvas
+    // India Subcontinent Highlight with intense Electric Cobalt & Acid Lime coastal border
+    drawPoly(dCtx, indiaPolygon, '#16363B', '#245BFF', 5, '#245BFF', 24);
+
+    // Riverine corridor (Ganga & Brahmaputra delta)
+    dCtx.save();
+    dCtx.strokeStyle = 'rgba(198, 255, 0, 0.75)';
+    dCtx.lineWidth = 3;
+    dCtx.beginPath();
+    [[30.0, 78.5], [27.5, 81.0], [25.5, 85.0], [24.0, 88.5], [22.2, 89.2]].forEach(function (pt, idx) {
+      var xy = toXY(pt[0], pt[1]);
+      if (idx === 0) dCtx.moveTo(xy[0], xy[1]);
+      else dCtx.lineTo(xy[0], xy[1]);
+    });
+    dCtx.stroke();
+    dCtx.restore();
+
+    // Graticule grid lines
+    dCtx.strokeStyle = 'rgba(36, 91, 255, 0.12)';
+    dCtx.lineWidth = 1;
+    for (var lat = -60; lat <= 60; lat += 20) {
+      var gy = toXY(lat, 0)[1];
+      dCtx.beginPath();
+      dCtx.moveTo(0, gy);
+      dCtx.lineTo(width, gy);
+      dCtx.stroke();
+    }
+    for (var lon = -160; lon <= 180; lon += 20) {
+      var gx = toXY(0, lon)[0];
+      dCtx.beginPath();
+      dCtx.moveTo(gx, 0);
+      dCtx.lineTo(gx, height);
+      dCtx.stroke();
+    }
+
+    // Emissive night-lights canvas
     var emissiveCanvas = document.createElement('canvas');
     emissiveCanvas.width = width;
     emissiveCanvas.height = height;
@@ -253,46 +307,47 @@
     eCtx.fillStyle = '#000000';
     eCtx.fillRect(0, 0, width, height);
 
-    drawPoly(eCtx, indiaPolygon, 'rgba(36, 91, 255, 0.28)', '#245BFF', 4);
+    drawPoly(eCtx, indiaPolygon, 'rgba(36, 91, 255, 0.35)', '#245BFF', 4, '#245BFF', 20);
 
     var cities = [
       [28.6139, 77.209, 8],
       [19.076, 72.8777, 8],
       [12.9716, 77.5946, 7],
       [13.0827, 80.2707, 7],
-      [22.5726, 88.3639, 8],
-      [26.1445, 91.7362, 8],
-      [20.5937, 78.9629, 9]
+      [22.5726, 88.3639, 9],
+      [26.1445, 91.7362, 8], // Guwahati / Brahmaputra
+      [25.5941, 85.1376, 8], // Patna / Ganga
+      [20.5937, 78.9629, 9]  // Central AOI
     ];
     for (var k = 0; k < cities.length; k++) {
       var cPt = toXY(cities[k][0], cities[k][1]);
       var rad = cities[k][2];
-      var g = eCtx.createRadialGradient(cPt[0], cPt[1], 0, cPt[0], cPt[1], rad * 3);
+      var g = eCtx.createRadialGradient(cPt[0], cPt[1], 0, cPt[0], cPt[1], rad * 3.2);
       g.addColorStop(0, '#FFFFFF');
       g.addColorStop(0.3, '#C6FF00');
-      g.addColorStop(0.7, 'rgba(36, 91, 255, 0.8)');
+      g.addColorStop(0.7, 'rgba(36, 91, 255, 0.85)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       eCtx.fillStyle = g;
       eCtx.beginPath();
-      eCtx.arc(cPt[0], cPt[1], rad * 3, 0, Math.PI * 2);
+      eCtx.arc(cPt[0], cPt[1], rad * 3.2, 0, Math.PI * 2);
       eCtx.fill();
     }
 
-    // Cloud layer
+    // Cloud layer canvas
     var cloudCanvas = document.createElement('canvas');
     cloudCanvas.width = 1024;
     cloudCanvas.height = 512;
     var cCtx = cloudCanvas.getContext('2d');
     cCtx.clearRect(0, 0, 1024, 512);
 
-    for (var m = 0; m < 300; m++) {
+    for (var m = 0; m < 340; m++) {
       var cx = Math.random() * 1024;
-      var cy = 40 + Math.random() * 430;
-      var rx = 20 + Math.random() * 60;
+      var cy = 35 + Math.random() * 440;
+      var rx = 22 + Math.random() * 65;
       var ry = 6 + Math.random() * 18;
       var cg = cCtx.createRadialGradient(cx, cy, 0, cx, cy, rx);
-      cg.addColorStop(0, 'rgba(244, 247, 255, 0.28)');
-      cg.addColorStop(0.6, 'rgba(180, 215, 255, 0.12)');
+      cg.addColorStop(0, 'rgba(244, 247, 255, 0.32)');
+      cg.addColorStop(0.6, 'rgba(180, 215, 255, 0.14)');
       cg.addColorStop(1, 'rgba(255, 255, 255, 0)');
       cCtx.fillStyle = cg;
       cCtx.save();
@@ -321,13 +376,13 @@
       roughnessMap: kaptonTex,
       color: new THREE.Color('#FFBE3D'),
       metalness: 0.88,
-      roughness: 0.3
+      roughness: 0.28
     });
 
     var titaniumMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color('#C4D0E2'),
       metalness: 0.92,
-      roughness: 0.2
+      roughness: 0.18
     });
 
     var darkAlloyMat = new THREE.MeshStandardMaterial({
@@ -339,10 +394,10 @@
     var solarMat = new THREE.MeshStandardMaterial({
       map: solarTex,
       color: new THREE.Color('#4A88FF'),
-      metalness: 0.8,
+      metalness: 0.82,
       roughness: 0.15,
       emissive: new THREE.Color('#0B2569'),
-      emissiveIntensity: 0.55
+      emissiveIntensity: 0.6
     });
 
     // Octagonal Gold Kapton Bus
@@ -433,7 +488,7 @@
     root.add(dishPivot);
 
     var beaconLime = new THREE.Mesh(
-      new THREE.SphereGeometry(0.045, 12, 12),
+      new THREE.SphereGeometry(0.048, 12, 12),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.acidLime) })
     );
     beaconLime.position.set(0.55, 1.02, 0.15);
@@ -449,26 +504,31 @@
     };
   }
 
+  // 8-Section Master Cinematic Keyframe Trajectory (0.0 to 1.0)
   var SCROLL_KEYFRAMES = {
-    earthX: [3.10, 0.32, -2.85, -2.05, 2.78, 2.25, -2.35, 1.15],
-    earthY: [-0.35, -0.12, -0.22, 0.42, -0.18, -0.45, 0.15, -0.25],
-    earthZ: [-1.80, 0.35, 1.10, 3.15, 1.45, -2.85, -0.35, -4.20],
-    earthScale: [1.00, 1.26, 1.34, 1.58, 1.32, 0.86, 1.14, 0.76],
-    earthYawOffset: [0.00, 0.22, 0.48, 0.16, -0.28, 0.10, 0.62, 1.15],
-    earthPitchOffset: [0.00, 0.08, 0.18, 0.26, 0.12, -0.08, 0.32, 0.05],
+    // 01 Hero, 02 Problem, 03 How it works, 04 Try it, 05 Link sim, 06 Results, 07 Judges, 08 Limits/Footer
+    earthX:           [ 3.60,   0.25,   -3.20,   -2.20,    3.00,    2.40,   -2.60,    1.20 ],
+    earthY:           [-0.30,  -0.15,   -0.25,    0.45,   -0.20,   -0.45,    0.18,   -0.30 ],
+    earthZ:           [-1.50,   0.40,    1.20,    3.40,    1.50,   -2.80,   -0.35,   -4.50 ],
+    earthScale:       [ 1.15,   1.38,    1.46,    1.75,    1.36,    0.92,    1.18,    0.78 ],
+    earthYawOffset:   [ 0.00,   0.25,    0.52,    0.18,   -0.30,    0.12,    0.65,    1.18 ],
+    earthPitchOffset: [ 0.00,   0.08,    0.18,    0.28,    0.12,   -0.08,    0.32,    0.06 ],
 
-    satX: [-3.95, -6.20, -8.80, -9.50, -8.50, -3.15, -7.20, -2.80],
-    satY: [0.28, 1.15, 2.10, 2.60, 1.95, 0.65, 1.85, 0.95],
-    satZ: [8.85, 6.40, 3.50, 2.00, 3.20, 7.80, 4.20, 6.10],
-    satScale: [1.02, 0.82, 0.60, 0.50, 0.60, 0.94, 0.65, 0.78],
+    satX:             [-3.95,  -6.20,   -8.80,   -9.50,   -8.50,   -3.15,   -7.20,   -2.80 ],
+    satY:             [ 0.28,   1.15,    2.10,    2.60,    1.95,    0.65,    1.85,    0.95 ],
+    satZ:             [ 8.85,   6.40,    3.50,    2.00,    3.20,    7.80,    4.20,    6.10 ],
+    satScale:         [ 1.05,   0.82,    0.60,    0.48,    0.60,    0.94,    0.65,    0.78 ],
 
-    camX: [-0.45, 0.00, -0.55, -0.75, 0.60, -0.20, -0.40, 0.15],
-    camY: [0.35, 0.25, 0.45, 0.58, 0.30, 0.40, 0.85, 0.55],
-    camZ: [13.40, 12.10, 11.40, 10.20, 11.50, 13.80, 12.30, 14.60],
+    camX:             [-0.40,   0.00,   -0.55,   -0.75,    0.60,   -0.20,   -0.40,    0.15 ],
+    camY:             [ 0.35,   0.25,    0.45,    0.58,    0.30,    0.40,    0.85,    0.55 ],
+    camZ:             [13.50,  12.20,   11.40,   10.20,   11.50,   13.80,   12.30,   14.60 ],
 
-    lookX: [0.65, 0.18, -1.45, -1.35, 1.45, 0.15, -1.15, 0.35],
-    lookY: [-0.08, -0.05, -0.10, 0.22, -0.08, -0.05, 0.08, -0.10],
-    lookZ: [1.80, 0.80, 0.90, 2.50, 1.10, 0.50, 0.20, -1.20]
+    lookX:            [ 0.65,   0.18,   -1.45,   -1.35,    1.45,    0.15,   -1.15,    0.35 ],
+    lookY:            [-0.08,  -0.05,   -0.10,    0.22,   -0.08,   -0.05,    0.08,   -0.10 ],
+    lookZ:            [ 1.80,   0.80,    0.90,    2.50,    1.10,    0.50,    0.20,   -1.20 ],
+
+    laserOpacity:     [ 1.00,   0.75,    0.45,    0.30,    0.95,    0.85,    0.50,    0.25 ],
+    chipGridOpacity:  [ 0.00,   0.05,    0.35,    1.00,    0.55,    0.15,    0.20,    0.05 ]
   };
 
   window.initOrbital3D = function (container) {
@@ -491,29 +551,29 @@
     renderer.setPixelRatio(dpr);
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.22;
+    renderer.toneMappingExposure = 1.25;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
     var scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.midnightBlack);
-    scene.fog = new THREE.FogExp2(COLORS.midnightBlack, 0.0038);
+    scene.fog = new THREE.FogExp2(COLORS.midnightBlack, 0.0035);
 
     var camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 400);
 
-    var ambientLight = new THREE.AmbientLight('#182B52', 0.72);
+    var ambientLight = new THREE.AmbientLight('#182B52', 0.75);
     scene.add(ambientLight);
 
-    var sunLight = new THREE.DirectionalLight('#FFF9EE', 2.8);
+    var sunLight = new THREE.DirectionalLight('#FFF9EE', 2.9);
     sunLight.position.set(18, 12, 18);
     scene.add(sunLight);
 
-    var cobaltRimLight = new THREE.PointLight(COLORS.cobaltBlue, 3.2, 32);
+    var cobaltRimLight = new THREE.PointLight(COLORS.cobaltBlue, 3.5, 36);
     cobaltRimLight.position.set(-7, 4, 13);
     scene.add(cobaltRimLight);
 
     // Deep space starfield
-    var starCount = isMobile ? 1200 : 2800;
+    var starCount = isMobile ? 1400 : 3200;
     var starGeo = new THREE.BufferGeometry();
     var starPositions = new Float32Array(starCount * 3);
     var starColors = new Float32Array(starCount * 3);
@@ -539,23 +599,23 @@
       size: isMobile ? 0.24 : 0.19,
       vertexColors: true,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.92
     });
     var starField = new THREE.Points(starGeo, starMat);
     scene.add(starField);
 
     // 3D Satellite Model
-    var kaptonTex = createKaptonTextures();
-    var solarTex = createSolarPanelTexture();
+    var kaptonTex = createKaptonTexture();
+    var solarTex = createSolarTexture();
     var satellite = buildSatelliteAssembly(kaptonTex, solarTex);
     satellite.root.position.set(-3.95, 0.28, 8.85);
     satellite.root.rotation.set(0.22, 0.55, -0.18);
     scene.add(satellite.root);
 
-    // 3D Earth
+    // Persistent 3D Earth Group
     var EARTH_RADIUS = 4.65;
     var earthGroup = new THREE.Group();
-    earthGroup.position.set(3.1, -0.35, -1.8);
+    earthGroup.position.set(3.6, -0.3, -1.5);
     scene.add(earthGroup);
 
     var textures = createEarthTextures();
@@ -563,9 +623,9 @@
       map: textures.dayTex,
       emissiveMap: textures.emissiveTex,
       emissive: new THREE.Color('#FFFFFF'),
-      emissiveIntensity: 1.08,
-      roughness: 0.52,
-      metalness: 0.2
+      emissiveIntensity: 1.1,
+      roughness: 0.5,
+      metalness: 0.22
     });
     var earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 64, 64), earthMat);
     earthGroup.add(earthMesh);
@@ -574,7 +634,7 @@
     var baseEarthRotX = ((INDIA_COORDS.lat - 8) * Math.PI) / 180;
     earthGroup.rotation.set(baseEarthRotX, baseEarthRotY, 0.06);
 
-    // Clouds
+    // Cloud Layer
     var cloudMat = new THREE.MeshStandardMaterial({
       map: textures.cloudTex,
       transparent: true,
@@ -585,9 +645,9 @@
     var cloudMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.013, 48, 48), cloudMat);
     earthGroup.add(cloudMesh);
 
-    // Atmospheric Glow
+    // Atmospheric Glow (Fresnel Shader)
     var atmoMat = new THREE.ShaderMaterial({
-      uniforms: { uIntensity: { value: 1.15 } },
+      uniforms: { uIntensity: { value: 1.25 } },
       vertexShader: [
         'varying vec3 vNormal;',
         'varying vec3 vPositionNormal;',
@@ -604,7 +664,7 @@
         'void main() {',
         '  float fresnel = pow(0.68 - dot(vNormal, vPositionNormal), 2.7);',
         '  vec3 col = mix(vec3(0.141, 0.357, 1.0), vec3(0.65, 0.88, 1.0), fresnel);',
-        '  gl_FragColor = vec4(col, clamp(fresnel * uIntensity, 0.0, 0.9));',
+        '  gl_FragColor = vec4(col, clamp(fresnel * uIntensity, 0.0, 0.95));',
         '}'
       ].join('\n'),
       blending: THREE.AdditiveBlending,
@@ -615,7 +675,7 @@
     var atmoMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.068, 64, 64), atmoMat);
     earthGroup.add(atmoMesh);
 
-    // Target Pin & Surface Grid
+    // India Ground Station Target Pin
     var indiaSurfacePos = latLonToVector3(INDIA_COORDS.lat, INDIA_COORDS.lon, EARTH_RADIUS * 1.016);
     var indiaTargetGroup = new THREE.Group();
     indiaTargetGroup.position.copy(indiaSurfacePos);
@@ -623,12 +683,12 @@
     earthGroup.add(indiaTargetGroup);
 
     var indiaCorePin = new THREE.Mesh(
-      new THREE.CircleGeometry(0.065, 24),
+      new THREE.CircleGeometry(0.075, 24),
       new THREE.MeshBasicMaterial({ color: new THREE.Color('#FFFFFF'), side: THREE.DoubleSide })
     );
     indiaTargetGroup.add(indiaCorePin);
 
-    // 3D 4x4 Flood Grid on Earth Surface
+    // 3D 4x4 Flood Grid on Earth Surface (Illuminates in Section 4)
     var chip3DGroup = new THREE.Group();
     chip3DGroup.position.z = 0.035;
     indiaTargetGroup.add(chip3DGroup);
@@ -656,7 +716,7 @@
       tile3DMeshes.push({ mesh: tileMesh, mat: tileMat, isCritical: t.isCritical, id: idx });
     });
 
-    // Ripples
+    // Expanding Sonar Ripples on Ground Station
     var rippleMeshes = [];
     for (var rIdx = 0; rIdx < 3; rIdx++) {
       var rColor = rIdx === 0 ? '#FFFFFF' : (rIdx === 1 ? COLORS.acidLime : COLORS.cobaltBlue);
@@ -673,7 +733,7 @@
       rippleMeshes.push(ripple);
     }
 
-    // Laser Beam Core & Outer Sheath
+    // Laser Core & Sheath
     var laserGroup = new THREE.Group();
     scene.add(laserGroup);
 
@@ -683,26 +743,26 @@
     var coreLaserMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#FFFFFF'),
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending
     });
     var coreLaserMesh = new THREE.Mesh(coreGeo, coreLaserMat);
     laserGroup.add(coreLaserMesh);
 
-    var sheathGeo = new THREE.CylinderGeometry(0.018, 0.026, 1, 16, 1, true);
+    var sheathGeo = new THREE.CylinderGeometry(0.02, 0.028, 1, 16, 1, true);
     sheathGeo.translate(0, 0.5, 0);
     sheathGeo.rotateX(Math.PI / 2);
     var sheathLaserMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(COLORS.cobaltBlue),
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.65,
       blending: THREE.AdditiveBlending
     });
     var sheathLaserMesh = new THREE.Mesh(sheathGeo, sheathLaserMat);
     laserGroup.add(sheathLaserMesh);
 
-    // Packets
-    var packetCount = 32;
+    // Photonic Data Packets
+    var packetCount = 36;
     var packetGeo = new THREE.BufferGeometry();
     var packetPos = new Float32Array(packetCount * 3);
     var packetColors = new Float32Array(packetCount * 3);
@@ -715,18 +775,35 @@
     packetGeo.setAttribute('position', new THREE.BufferAttribute(packetPos, 3));
     packetGeo.setAttribute('color', new THREE.BufferAttribute(packetColors, 3));
     var packetMat = new THREE.PointsMaterial({
-      size: 0.14,
+      size: 0.15,
       vertexColors: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
       blending: THREE.AdditiveBlending
     });
     var laserPackets = new THREE.Points(packetGeo, packetMat);
     scene.add(laserPackets);
 
-    // Intro Sequence State
+    // Interactive 3D Orbiting Highlight Function
+    window.highlight3DTile = function (tileId, isCritical) {
+      tile3DMeshes.forEach(function (item) {
+        if (item.id === tileId) {
+          item.mat.color.set(isCritical ? COLORS.acidLime : '#FFFFFF');
+          item.mat.opacity = 1.0;
+          item.mesh.scale.set(1.4, 1.4, 1.4);
+        } else {
+          item.mesh.scale.set(1.0, 1.0, 1.0);
+        }
+      });
+    };
+
+    // Intro & Scroll State Management
     var introProgress = 0.0;
     var introComplete = false;
+    var targetScroll = 0.0;
+    var smoothScroll = 0.0;
+    var inspect3D = false;
+    var dragData = { isDragging: false, prevX: 0, prevY: 0, rotY: 0, rotX: 0 };
 
     window.skipIntro = function () {
       introProgress = 1.0;
@@ -740,26 +817,8 @@
       introProgress = 0.0;
       introComplete = false;
       var introBanner = document.getElementById('introBanner');
-      if (introBanner) introBanner.style.display = 'flex';
+      if (introBanner) introBanner.style.display = 'inline-flex';
     };
-
-    window.highlight3DTile = function (tileId, isCritical) {
-      tile3DMeshes.forEach(function (item) {
-        if (item.id === tileId) {
-          item.mat.color.set(isCritical ? COLORS.acidLime : '#FFFFFF');
-          item.mat.opacity = 1.0;
-          item.mesh.scale.set(1.3, 1.3, 1.3);
-        } else {
-          item.mesh.scale.set(1.0, 1.0, 1.0);
-        }
-      });
-    };
-
-    // Smooth Scroll Tracking
-    var targetScroll = 0;
-    var smoothScroll = 0;
-    var inspect3D = false;
-    var dragData = { isDragging: false, prevX: 0, prevY: 0, rotY: 0, rotX: 0 };
 
     window.toggle3DDragMode = function () {
       inspect3D = !inspect3D;
@@ -773,36 +832,72 @@
       return inspect3D;
     };
 
-    function onScroll() {
-      var docEl = document.documentElement;
-      var max = Math.max(1, docEl.scrollHeight - window.innerHeight);
-      var cur = window.scrollY || docEl.scrollTop || 0;
-      targetScroll = clamp(cur / max, 0, 1);
+    // GSAP ScrollTrigger Integration for silky-smooth continuous document scrolling
+    if (window.gsap && window.ScrollTrigger) {
+      window.gsap.registerPlugin(window.ScrollTrigger);
 
-      if (cur > 40 && !introComplete) {
-        window.skipIntro();
-      }
+      window.ScrollTrigger.create({
+        trigger: 'body',
+        start: 'top top',
+        end: 'bottom bottom',
+        scrub: 1.2,
+        onUpdate: function (self) {
+          targetScroll = self.progress;
 
-      var ribbon = document.getElementById('scrollRibbon');
-      if (ribbon) {
-        ribbon.style.width = Math.max(2, targetScroll * 100) + '%';
-      }
+          if (self.progress > 0.02 && !introComplete) {
+            window.skipIntro();
+          }
 
-      var railDots = document.querySelectorAll('.rail-dot');
-      var secIdx = Math.min(railDots.length - 1, Math.floor(targetScroll * railDots.length + 0.05));
-      railDots.forEach(function (dot, i) {
-        dot.classList.toggle('active', i === secIdx);
+          var ribbon = document.getElementById('scrollRibbon');
+          if (ribbon) {
+            ribbon.style.width = Math.max(2, self.progress * 100) + '%';
+          }
+
+          var railDots = document.querySelectorAll('.rail-dot');
+          var secIdx = Math.min(railDots.length - 1, Math.floor(self.progress * railDots.length + 0.05));
+          railDots.forEach(function (dot, i) {
+            dot.classList.toggle('active', i === secIdx);
+          });
+
+          var stageLabel = document.getElementById('hudStage');
+          if (stageLabel && MISSION_SECTIONS[secIdx]) {
+            stageLabel.innerText = MISSION_SECTIONS[secIdx].code + ' ' + MISSION_SECTIONS[secIdx].label;
+          }
+        }
       });
+    } else {
+      // Native scroll fallback
+      function onScroll() {
+        var docEl = document.documentElement;
+        var max = Math.max(1, docEl.scrollHeight - window.innerHeight);
+        var cur = window.scrollY || docEl.scrollTop || 0;
+        targetScroll = clamp(cur / max, 0, 1);
 
-      var stageLabel = document.getElementById('hudStage');
-      if (stageLabel && MISSION_SECTIONS[secIdx]) {
-        stageLabel.innerText = MISSION_SECTIONS[secIdx].code + ' ' + MISSION_SECTIONS[secIdx].label;
+        if (cur > 40 && !introComplete) {
+          window.skipIntro();
+        }
+
+        var ribbon = document.getElementById('scrollRibbon');
+        if (ribbon) {
+          ribbon.style.width = Math.max(2, targetScroll * 100) + '%';
+        }
+
+        var railDots = document.querySelectorAll('.rail-dot');
+        var secIdx = Math.min(railDots.length - 1, Math.floor(targetScroll * railDots.length + 0.05));
+        railDots.forEach(function (dot, i) {
+          dot.classList.toggle('active', i === secIdx);
+        });
+
+        var stageLabel = document.getElementById('hudStage');
+        if (stageLabel && MISSION_SECTIONS[secIdx]) {
+          stageLabel.innerText = MISSION_SECTIONS[secIdx].code + ' ' + MISSION_SECTIONS[secIdx].label;
+        }
       }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
     }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
 
-    // Mouse drag handlers
+    // Interactive Drag Listeners for 3D Inspect Mode
     function onPointerDown(e) {
       if (!inspect3D) return;
       var cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -850,7 +945,7 @@
       var dt = Math.min(clock.getDelta(), 0.05);
       var elapsed = clock.getElapsedTime();
 
-      // Intro progression
+      // 1. Advance Intro Sequence if active
       if (!introComplete) {
         introProgress = clamp(introProgress + dt * 0.12, 0.0, 1.0);
         if (introProgress >= 1.0) {
@@ -872,32 +967,50 @@
         }
       }
 
+      var ip = introProgress;
+
+      // 2. Continuous Scroll Interpolation with Exponential Damping
       smoothScroll = THREE.MathUtils.damp(smoothScroll, targetScroll, 5.2, dt);
       var s = smoothScroll;
 
       var mobileScaleMod = isMobile ? 0.78 : 1.0;
       var mobileXMod = isMobile ? 0.45 : 1.0;
 
-      var scrollEarthX = sampleScalarSpline(SCROLL_KEYFRAMES.earthX, s) * mobileXMod;
-      var scrollEarthY = sampleScalarSpline(SCROLL_KEYFRAMES.earthY, s);
-      var scrollEarthZ = sampleScalarSpline(SCROLL_KEYFRAMES.earthZ, s);
-      var scrollEarthScale = sampleScalarSpline(SCROLL_KEYFRAMES.earthScale, s) * mobileScaleMod;
-      var scrollEarthYaw = sampleScalarSpline(SCROLL_KEYFRAMES.earthYawOffset, s);
-      var scrollEarthPitch = sampleScalarSpline(SCROLL_KEYFRAMES.earthPitchOffset, s);
+      // Evaluate Continuous Spline Target Poses
+      var scrollEarthX = sampleSpline(SCROLL_KEYFRAMES.earthX, s) * mobileXMod;
+      var scrollEarthY = sampleSpline(SCROLL_KEYFRAMES.earthY, s);
+      var scrollEarthZ = sampleSpline(SCROLL_KEYFRAMES.earthZ, s);
+      var scrollEarthScale = sampleSpline(SCROLL_KEYFRAMES.earthScale, s) * mobileScaleMod;
+      var scrollEarthYaw = sampleSpline(SCROLL_KEYFRAMES.earthYawOffset, s);
+      var scrollEarthPitch = sampleSpline(SCROLL_KEYFRAMES.earthPitchOffset, s);
 
-      var scrollSatX = sampleScalarSpline(SCROLL_KEYFRAMES.satX, s) * mobileXMod;
-      var scrollSatY = sampleScalarSpline(SCROLL_KEYFRAMES.satY, s);
-      var scrollSatZ = sampleScalarSpline(SCROLL_KEYFRAMES.satZ, s);
-      var scrollSatScale = sampleScalarSpline(SCROLL_KEYFRAMES.satScale, s) * mobileScaleMod;
+      var scrollSatX = sampleSpline(SCROLL_KEYFRAMES.satX, s) * mobileXMod;
+      var scrollSatY = sampleSpline(SCROLL_KEYFRAMES.satY, s);
+      var scrollSatZ = sampleSpline(SCROLL_KEYFRAMES.satZ, s);
+      var scrollSatScale = sampleSpline(SCROLL_KEYFRAMES.satScale, s) * mobileScaleMod;
 
-      var scrollCamX = sampleScalarSpline(SCROLL_KEYFRAMES.camX, s) * mobileXMod;
-      var scrollCamY = sampleScalarSpline(SCROLL_KEYFRAMES.camY, s);
-      var scrollCamZ = sampleScalarSpline(SCROLL_KEYFRAMES.camZ, s);
+      var scrollCamX = sampleSpline(SCROLL_KEYFRAMES.camX, s) * mobileXMod;
+      var scrollCamY = sampleSpline(SCROLL_KEYFRAMES.camY, s);
+      var scrollCamZ = sampleSpline(SCROLL_KEYFRAMES.camZ, s);
 
-      var scrollLookX = sampleScalarSpline(SCROLL_KEYFRAMES.lookX, s) * mobileXMod;
-      var scrollLookY = sampleScalarSpline(SCROLL_KEYFRAMES.lookY, s);
-      var scrollLookZ = sampleScalarSpline(SCROLL_KEYFRAMES.lookZ, s);
+      var scrollLookX = sampleSpline(SCROLL_KEYFRAMES.lookX, s) * mobileXMod;
+      var scrollLookY = sampleSpline(SCROLL_KEYFRAMES.lookY, s);
+      var scrollLookZ = sampleSpline(SCROLL_KEYFRAMES.lookZ, s);
 
+      var laserOp = sampleSpline(SCROLL_KEYFRAMES.laserOpacity, s);
+      var chipGridOp = sampleSpline(SCROLL_KEYFRAMES.chipGridOpacity, s);
+
+      // Smooth Intro Camera Handoff into Scroll Pose (Zero Jump!)
+      var introBlend = smoothstep(0.0, 1.0, ip);
+      var targetCamX = THREE.MathUtils.lerp(-2.35 * mobileXMod, scrollCamX, introBlend);
+      var targetCamY = THREE.MathUtils.lerp(0.42, scrollCamY, introBlend);
+      var targetCamZ = THREE.MathUtils.lerp(13.95, scrollCamZ, introBlend);
+
+      var targetLookX = THREE.MathUtils.lerp(-0.95 * mobileXMod, scrollLookX, introBlend);
+      var targetLookY = THREE.MathUtils.lerp(0.08, scrollLookY, introBlend);
+      var targetLookZ = THREE.MathUtils.lerp(4.2, scrollLookZ, introBlend);
+
+      // Apply Transformations to Earth
       earthGroup.position.x = THREE.MathUtils.damp(earthGroup.position.x, scrollEarthX, 6, dt);
       earthGroup.position.y = THREE.MathUtils.damp(earthGroup.position.y, scrollEarthY, 6, dt);
       earthGroup.position.z = THREE.MathUtils.damp(earthGroup.position.z, scrollEarthZ, 6, dt);
@@ -905,45 +1018,60 @@
       var curScale = THREE.MathUtils.damp(earthGroup.scale.x, scrollEarthScale, 6, dt);
       earthGroup.scale.setScalar(curScale);
 
+      // Geographic viewing focus + subtle orbital drift + manual drag offset
       var desRotY = baseEarthRotY + scrollEarthYaw + dragData.rotY + Math.sin(elapsed * 0.12) * 0.035;
       var desRotX = baseEarthRotX + scrollEarthPitch + dragData.rotX;
       earthGroup.rotation.y = THREE.MathUtils.damp(earthGroup.rotation.y, desRotY, 6, dt);
       earthGroup.rotation.x = THREE.MathUtils.damp(earthGroup.rotation.x, desRotX, 6, dt);
 
+      // Continuous cloud movement
       cloudMesh.rotation.y = elapsed * 0.022;
 
+      // Apply Transformations to Satellite
       satellite.root.position.x = THREE.MathUtils.damp(satellite.root.position.x, scrollSatX, 6, dt);
       satellite.root.position.y = THREE.MathUtils.damp(satellite.root.position.y, scrollSatY + Math.sin(elapsed * 0.9) * 0.08, 6, dt);
       satellite.root.position.z = THREE.MathUtils.damp(satellite.root.position.z, scrollSatZ, 6, dt);
       satellite.root.scale.setScalar(THREE.MathUtils.damp(satellite.root.scale.x, scrollSatScale, 6, dt));
       satellite.beaconLime.scale.setScalar(0.85 + Math.sin(elapsed * 7.0) * 0.35);
 
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, scrollCamX, 6, dt);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, scrollCamY, 6, dt);
-      camera.position.z = THREE.MathUtils.damp(camera.position.z, scrollCamZ, 6, dt);
+      // Apply Transformations to Camera
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamX, 6, dt);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamY, 6, dt);
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamZ, 6, dt);
 
-      currentCamLook.x = THREE.MathUtils.damp(currentCamLook.x, scrollLookX, 6, dt);
-      currentCamLook.y = THREE.MathUtils.damp(currentCamLook.y, scrollLookY, 6, dt);
-      currentCamLook.z = THREE.MathUtils.damp(currentCamLook.z, scrollLookZ, 6, dt);
+      currentCamLook.x = THREE.MathUtils.damp(currentCamLook.x, targetLookX, 6, dt);
+      currentCamLook.y = THREE.MathUtils.damp(currentCamLook.y, targetLookY, 6, dt);
+      currentCamLook.z = THREE.MathUtils.damp(currentCamLook.z, targetLookZ, 6, dt);
       camera.lookAt(currentCamLook);
 
-      // Track laser dish to India
+      // Track laser dish towards India Target
       satellite.emitterCore.getWorldPosition(emitterWorldPos);
       indiaCorePin.getWorldPosition(indiaWorldPos);
       satellite.dishPivot.lookAt(indiaWorldPos);
 
+      var antennaLock = smoothstep(0.22, 0.40, ip);
+      var laserExtend = smoothstep(0.40, 0.65, ip);
+      var effectiveLaserOp = antennaLock * laserOp;
+
       var beamDist = emitterWorldPos.distanceTo(indiaWorldPos);
       coreLaserMesh.position.copy(emitterWorldPos);
       coreLaserMesh.lookAt(indiaWorldPos);
-      coreLaserMesh.scale.set(1, 1, beamDist);
+      coreLaserMesh.scale.set(1, 1, beamDist * laserExtend);
+      coreLaserMat.opacity = effectiveLaserOp * 0.95;
 
       sheathLaserMesh.position.copy(emitterWorldPos);
       sheathLaserMesh.lookAt(indiaWorldPos);
-      sheathLaserMesh.scale.set(1, 1, beamDist);
+      sheathLaserMesh.scale.set(1, 1, beamDist * laserExtend);
+      sheathLaserMat.opacity = effectiveLaserOp * 0.75;
 
+      satellite.emitterHalo.material.opacity = effectiveLaserOp * 0.9;
+      satellite.emitterHalo.scale.setScalar(1.0 + Math.sin(elapsed * 10.0) * 0.18);
+
+      // Animate photonic telemetry packets streaming down laser beam
+      packetMat.opacity = effectiveLaserOp * 0.95;
       var pAttr = packetGeo.attributes.position;
       for (var k = 0; k < packetCount; k++) {
-        var t = (k / packetCount + elapsed * 0.82) % 1.0;
+        var t = ((k / packetCount + elapsed * 0.82) % 1.0) * laserExtend;
         pAttr.setXYZ(
           k,
           THREE.MathUtils.lerp(emitterWorldPos.x, indiaWorldPos.x, t),
@@ -953,16 +1081,18 @@
       }
       pAttr.needsUpdate = true;
 
-      // Pulse 3D tiles gently
+      // Pulse 3D flood tiles on Earth surface
       tile3DMeshes.forEach(function (item, idx) {
-        var pulse = item.isCritical ? 0.55 + 0.35 * Math.sin(elapsed * 4.5 + idx) : 0.3;
-        item.mat.opacity = pulse;
+        var pulse = item.isCritical ? 0.65 + 0.35 * Math.sin(elapsed * 5.0 + idx) : 0.35;
+        item.mat.opacity = chipGridOp * pulse;
       });
 
+      // Target point flash & expanding sonar ripples over India
+      var impactActive = smoothstep(0.55, 0.70, ip);
       rippleMeshes.forEach(function (rip, idx) {
-        var ph = (elapsed * 0.7 + idx * 0.33) % 1.0;
-        rip.scale.setScalar(0.35 + ph * 3.2);
-        rip.material.opacity = (1.0 - ph) * 0.75;
+        var ph = (elapsed * 0.72 + idx * 0.33) % 1.0;
+        rip.scale.setScalar(0.35 + ph * 3.4);
+        rip.material.opacity = (1.0 - ph) * impactActive * 0.85;
       });
 
       renderer.render(scene, camera);
