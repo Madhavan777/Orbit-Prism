@@ -103,7 +103,9 @@ def compute_conformal_threshold(
     threshold = float(clean_scores[idx])
 
     return {
-        "threshold": round(threshold, 6),
+        # Stored exactly: INT8 scores sit on a coarse grid (multiples of 1/256), so rounding the
+        # cut-off up by even 5e-7 would push every tile tied at the cut-off below it and count it missed.
+        "threshold": threshold,
         "k": k,
         "n": n,
         "status": "exact",

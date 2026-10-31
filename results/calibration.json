@@ -4,13 +4,13 @@
   "method": "split_conformal",
   "optical": {
     "0.01": 0.0,
-    "0.05": 0.085938,
-    "0.1": 0.132812
+    "0.05": 0.0859375,
+    "0.1": 0.1328125
   },
   "radar": {
     "0.01": 0.0,
     "0.05": 0.140625,
-    "0.1": 0.148438
+    "0.1": 0.1484375
   },
   "target_alphas": [
     "0.01",
@@ -139,7 +139,7 @@
         "note": "Sample size n=76 < 99; no exact quantile exists, so every tile is kept (threshold 0.0)."
       },
       "0.05": {
-        "threshold": 0.085938,
+        "threshold": 0.0859375,
         "k": 3,
         "n": 76,
         "status": "exact",
@@ -147,7 +147,7 @@
         "note": "k-th smallest score with 1-based k=3 (0-based index 2)."
       },
       "0.1": {
-        "threshold": 0.132812,
+        "threshold": 0.1328125,
         "k": 7,
         "n": 76,
         "status": "exact",
@@ -174,7 +174,7 @@
         "note": "k-th smallest score with 1-based k=2 (0-based index 1)."
       },
       "0.1": {
-        "threshold": 0.148438,
+        "threshold": 0.1484375,
         "k": 4,
         "n": 42,
         "status": "exact",

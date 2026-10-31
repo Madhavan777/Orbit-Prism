@@ -86,6 +86,16 @@ def test_conformal_finite_sample_formula():
     assert pytest.approx(res_10["threshold"], 0.001) == scores[9]
 
 
+def test_conformal_threshold_is_stored_exactly_so_tied_scores_are_kept():
+    """INT8 scores lie on a 1/256 grid. A cut-off rounded up (0.1484375 -> 0.148438) would count every
+    tile tied at the cut-off as missed under the rule keep_tile if p_flood >= threshold."""
+    scores = np.array([0.1484375] * 4 + [0.2, 0.3, 0.4, 0.5, 0.6, 0.7] * 4)
+    res = compute_conformal_threshold(scores, 0.10)
+    assert res["status"] == "exact"
+    assert res["threshold"] == 0.1484375
+    assert not (scores < res["threshold"]).any()
+
+
 def test_conformal_edge_case_k_zero():
     """Test small sample size where k = floor((n + 1) * alpha) == 0 triggers conservative fallback."""
     # With n = 10 critical scores, for alpha = 0.01:

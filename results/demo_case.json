@@ -7,7 +7,7 @@
   "split": "holdout",
   "dial_target": 0.05,
   "thresholds": {
-    "optical": 0.085938,
+    "optical": 0.0859375,
     "radar": 0.140625
   },
   "truth": {
@@ -29,8 +29,8 @@
     "Discard cloudy": null,
     "Optical-only triage": null,
     "ORBIT-PRISM": {
-      "order": 173,
-      "cum_MB": 1.178
+      "order": 175,
+      "cum_MB": 1.18
     }
   },
   "cloudy_critical_tiles_delivered": {
