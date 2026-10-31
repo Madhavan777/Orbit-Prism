@@ -1,0 +1,50 @@
+{
+  "tile_id": "Bolivia_314919_1_1",
+  "event": "Bolivia",
+  "chip": "Bolivia_314919",
+  "row": 1,
+  "col": 1,
+  "split": "holdout",
+  "dial_target": 0.05,
+  "thresholds": {
+    "optical": 0.085938,
+    "radar": 0.140625
+  },
+  "truth": {
+    "water_frac": 0.7721,
+    "critical": true
+  },
+  "cloud_frac": 0.8721,
+  "routed_to": "radar",
+  "scores": {
+    "p_optical": 0.1133,
+    "p_radar": 0.2773,
+    "extent_radar": 0.3359
+  },
+  "kept_by_dial": true,
+  "alert_hex": "01000004ce27010100004700560017da00000000000000010000000000000951",
+  "scaled_budget_MB": 3.028,
+  "full_tile_delivery": {
+    "Capture order": null,
+    "Discard cloudy": null,
+    "Optical-only triage": null,
+    "ORBIT-PRISM": {
+      "order": 173,
+      "cum_MB": 1.178
+    }
+  },
+  "cloudy_critical_tiles_delivered": {
+    "total": 21,
+    "Capture order": 4,
+    "Discard cloudy": 0,
+    "Optical-only triage": 15,
+    "ORBIT-PRISM": 19
+  },
+  "selection_rule": "highest flood share among cloudy critical tiles that ORBIT-PRISM delivers and discard-cloudy and optical-only do not, at the scaled pass",
+  "caveats": [
+    "Chosen from the held-out event to illustrate the radar fallback; not a typical tile.",
+    "Clouds are simulated.",
+    "Scaled pass, not the real 19.2 MB pass."
+  ],
+  "n_candidates": 5
+}
