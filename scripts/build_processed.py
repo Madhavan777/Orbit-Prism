@@ -1,7 +1,8 @@
 """Build data/processed/<event>.npz from the raw Sen1Floods11 chips, then check it against tiles_base.csv.
 
 For every event: reads LabelHand, JRCWaterHand, S1Hand and S2Hand chips, scales optical (B2, B3, B4, B8)
-and radar (VV, VH) to uint8, simulates clouds on the OPTICAL tiles only (radar is never touched), cuts
+and radar (VV, VH) to uint8, simulates OPAQUE clouds on the OPTICAL tiles only (radar is never touched;
+pixels inside the cloud mask become pure white; --soft-clouds gives the old semi-transparent haze), cuts
 each 512x512 chip into 16 tiles of 128x128, and saves one NPZ per event with
     tile_id, optical (N,128,128,4) uint8, radar (N,128,128,2) uint8, water_frac, cloud_frac, split, critical
 
@@ -70,7 +71,12 @@ def main():
     ap.add_argument("--events", nargs="+", default=None, help="events to build (default: all)")
     ap.add_argument("--raw-dir", type=Path, default=RAW)
     ap.add_argument("--processed-dir", type=Path, default=PROCESSED)
+    ap.add_argument("--soft-clouds", action="store_true",
+                    help="semi-transparent haze instead of the default opaque clouds (sensitivity runs only; "
+                         "use a different --processed-dir so the main data is not overwritten)")
     args = ap.parse_args()
+    if args.soft_clouds and args.processed_dir == PROCESSED:
+        sys.exit("--soft-clouds needs its own --processed-dir (for example data/processed_soft)")
 
     if not TILES_BASE.exists():
         sys.exit("Missing data/tiles_base.csv (run python scripts/build_tiles_base.py)")
@@ -93,7 +99,8 @@ def main():
             failed = True
             continue
         npz, _, counts = process_event_chips(event, raw_dir=args.raw_dir, processed_dir=args.processed_dir,
-                                             chip_splits=splits, target_cloud_lookup=lookup)
+                                             chip_splits=splits, target_cloud_lookup=lookup,
+                                             opaque_clouds=not args.soft_clouds)
         problems = check_event(npz, event, base)
         status = "OK " if not problems else "BAD"
         print(f"{status} {event}: {counts['valid_tiles']} tiles ({counts['critical_tiles']} critical), "

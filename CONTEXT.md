@@ -50,6 +50,8 @@ Design notes:
 7. **Optical-only baseline, real pipeline:** the same optical model scores cloudy tiles on the simulated-cloud pixels. That is what a system without radar would do. `scripts/baselines.py` only approximates it by treating cloudy tiles as blind.
 8. **Permanent-water removal matters.** Subtracting the JRC layer turns 280 of 6,825 tiles (4.1%) from critical to non-critical, and permanent-water pixels stay in the denominator. Anyone rebuilding labels must do the same.
 
+9. **Simulated clouds are opaque (decided 2026-10-31).** Pixels inside the cloud mask (alpha >= 0.5) are pure white in the optical tiles; the old semi-transparent haze let optical models read through heavy cloud (AUROC 0.93 on 75-100% cloud tiles, against 0.79 when opaque) and hid the reason for the radar fallback. `cloud_frac`, routing, splits and `tiles_base.csv` are unchanged; the optical pixels, the optical model, its scores and everything downstream are rebuilt. The soft-cloud numbers are reported as a labelled sensitivity result, never as the headline.
+
 ## Scope (decided by Madhavan, 2026-10-31)
 
 - **In scope: floods (primary, fully measured) and forest fires (second hazard).**

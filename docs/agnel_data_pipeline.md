@@ -116,10 +116,9 @@ python -m src.data.download
   1. Deterministic random seed derived from `chip_id` (e.g. SHA-256 hash).
   2. Gaussian white noise field smoothed with a 2D Gaussian filter ($\sigma = 24.0$).
   3. Chip-level target cloud cover drawn from $[0.0, 0.90]$.
-  4. Continuous alpha opacity mask generated in $[0, 1]$ with soft boundary sigmoid transitions.
-  5. Blends optical pixels towards bright white ($255\text{ uint8}$):
-     $$I_{\text{cloudy}} = (1 - \alpha) \cdot I_{\text{optical}} + \alpha \cdot 255.0$$
-  6. Per-tile cloud fraction: fraction of pixels with $\alpha \ge 0.5$.
+  4. Continuous alpha opacity mask generated in [0, 1] with soft boundary sigmoid transitions.
+  5. **Clouds are OPAQUE (project default, decided 2026-10-31).** Pixels with alpha >= 0.5 become pure white (255) in every optical band, so optical sees nothing there, as under dense real cloud; pixels outside are untouched. The earlier semi-transparent haze, I_cloudy = (1 - alpha) * I_optical + alpha * 255, is kept as a sensitivity setting (`opaque=False`, `scripts/build_processed.py --soft-clouds` into its own folder). Under haze an optical model read through 75-100% cloud tiles at AUROC 0.93, against 0.79 when opaque (results/optical_cloud_sensitivity.csv), which would have hidden the reason for the radar fallback.
+  6. Per-tile cloud fraction: fraction of pixels with alpha >= 0.5. This set of pixels is the same for opaque and soft clouds, so `cloud_frac`, `sensor_used`, the splits and `data/tiles_base.csv` do not change between the two.
   7. Sensor selection contract:
      $$\text{sensor\_used} = \begin{cases} \text{radar} & \text{if } \text{cloud\_frac} \ge 0.5 \\ \text{optical} & \text{otherwise} \end{cases}$$
 
