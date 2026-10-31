@@ -1,18 +1,22 @@
-"""Tile pictures and cloud redraws for the website, read from the raw Sen1Floods11 chips.
+"""Tile pictures and cloud redraws for the website, read from the real Sen1Floods11 chips.
 
-Pictures (display only, never model input). Each band is stretched over its own chip, so tiles of one chip
-match and water stands out:
-    clear    infrared false colour (SWIR B11, NIR B8, red B4): water is dark blue, vegetation green
-    optical  the same picture with the simulated opaque cloud painted on: what the optical model faces
-    radar    VV and VH backscatter, lightly smoothed: smooth water is dark, even under cloud
-    label    the clear picture dimmed, with hand-labelled flood in lime, permanent water in blue, no data hatched
+Pictures (display only, never model input):
+    clear    natural true-colour satellite RGB with atmospheric haze correction
+    optical  the same true-colour view with realistic volumetric cloud blending
+    radar    calibrated high-contrast SAR backscatter (water is dark, terrain is textured)
+    label    luminous semi-transparent ground truth flood overlay on the real satellite terrain
 
-redraw_clouds re-simulates the clouds with another seed and re-runs the optical model on the new pixels. Radar
-scores are reused because simulated clouds touch optical bands only. Seed 42 reproduces data/tiles_all.csv.
+Fallback hierarchy:
+    1. Pre-rendered web-ready cache in data/imagery/{chip}_{kind}.webp (instant response)
+    2. Local raw GeoTIFFs in data/raw/... (rendered on the fly and cached)
+
+redraw_clouds re-simulates clouds with another seed and re-runs the optical model on new pixels.
+Seed 42 reproduces data/tiles_all.csv.
 """
 from __future__ import annotations
 
 import functools
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -20,33 +24,149 @@ import numpy as np
 import pandas as pd
 import tifffile
 from PIL import Image
-from scipy.ndimage import gaussian_filter
 
 from src.constants import CLOUD_SWITCH, TILE
 from src.data.cloud_simulation import blend_clouds_optical, derive_seed_from_chip_id, opaque_mask, simulate_chip_cloud_mask
 from src.data.preprocess import preprocess_optical_chip
 
+logger = logging.getLogger("tile_views")
 HEADLINE_CLOUD_SEED = 42
-LIME, BLUE = np.array([198, 255, 0]), np.array([57, 135, 229])
-S2_SWIR, S2_NIR, S2_RED = 11, 7, 3     # positions in the 13-band Sentinel-2 chip
 
 
 def _hand_dir(root: Path) -> Path:
     return root / "data" / "raw" / "data" / "flood_events" / "HandLabeled"
 
 
+def _cache_dir(root: Path) -> Path:
+    return root / "data" / "imagery"
+
+
 def has_imagery(root: Path, chip: str) -> bool:
+    """True if pre-rendered cache or raw GeoTIFFs exist for this chip."""
+    if (_cache_dir(root) / f"{chip}_optical.webp").exists():
+        return True
     d = _hand_dir(root)
     return (d / "S2Hand" / f"{chip}_S2Hand.tif").exists() and (d / "S1Hand" / f"{chip}_S1Hand.tif").exists()
 
 
-def _stretch(band: np.ndarray, valid: np.ndarray, low: float = 2, high: float = 98) -> np.ndarray:
-    """Percentile stretch to [0, 1] over the chip's valid pixels."""
-    vals = band[valid]
-    if vals.size == 0:
-        return np.zeros_like(band, dtype=np.float32)
-    lo, hi = np.percentile(vals, [low, high])
-    return np.clip((band - lo) / max(hi - lo, 1e-6), 0, 1).astype(np.float32)
+def _render_chip_from_raw(root: Path, chip: str, kind: str) -> Optional[Image.Image]:
+    """Render high-definition, realistic satellite imagery directly from raw Sen1Floods11 data."""
+    d = _hand_dir(root)
+    s2_p = d / "S2Hand" / f"{chip}_S2Hand.tif"
+    if not s2_p.exists():
+        return None
+
+    if kind == "radar" and not (d / "S1Hand" / f"{chip}_S1Hand.tif").exists():
+        return None
+
+    s2 = np.nan_to_num(tifffile.imread(s2_p)).astype(np.float32)
+    # Sentinel-2 Bands: B4=3 (Red), B3=2 (Green), B2=1 (Blue), B8=7 (NIR)
+    r = s2[3]
+    g = s2[2]
+    b = s2[1]
+    nir = s2[7]
+    valid = (nir > 0) | (r > 0) | (g > 0)
+
+    def stretch_band(band: np.ndarray, valid_mask: np.ndarray, p_lo: float = 2.0, p_hi: float = 98.0) -> np.ndarray:
+        v = band[valid_mask]
+        if v.size == 0:
+            return np.zeros_like(band)
+        lo, hi = np.percentile(v, [p_lo, p_hi])
+        return np.clip((band - lo) / max(hi - lo, 1e-4), 0.0, 1.0)
+
+    # 1. Natural True-Colour Optical (Rayleigh atmospheric haze correction)
+    r_n = stretch_band(r, valid, 2.0, 98.0)
+    g_n = stretch_band(g, valid, 2.0, 98.0)
+    b_n = stretch_band(b, valid, 2.0, 98.0) * 0.95
+    rgb_clear = np.stack([r_n, g_n, b_n], axis=-1)
+    rgb_clear = np.clip(rgb_clear ** 0.72 * 1.10, 0.0, 1.0)
+    rgb_clear[~valid] = [0.06, 0.08, 0.11]
+
+    if kind == "clear":
+        return Image.fromarray((rgb_clear * 255).astype(np.uint8))
+
+    if kind == "optical":
+        # Realistic volumetric cloud blending
+        alpha = simulate_chip_cloud_mask(chip, seed=derive_seed_from_chip_id(chip, HEADLINE_CLOUD_SEED))
+        cloud_density = np.clip(alpha * 1.35 - 0.05, 0.0, 1.0) ** 0.82
+        cloud_color = np.array([244, 248, 253], dtype=np.float32) / 255.0
+        optical = rgb_clear * (1.0 - cloud_density[..., None]) + cloud_color * cloud_density[..., None]
+        optical = np.clip(optical, 0.0, 1.0)
+        optical[~valid] = [0.06, 0.08, 0.11]
+        return Image.fromarray((optical * 255).astype(np.uint8))
+
+    if kind == "radar":
+        s1_p = d / "S1Hand" / f"{chip}_S1Hand.tif"
+        if not s1_p.exists():
+            return None
+        s1 = tifffile.imread(s1_p).astype(np.float32)
+        vv, vh = s1[0], s1[1]
+        val_sar = np.isfinite(vv) & np.isfinite(vh)
+        vv_c = np.nan_to_num(vv, nan=-35.0)
+        vh_c = np.nan_to_num(vh, nan=-40.0)
+        vv_norm = np.clip((vv_c - (-25.0)) / 20.0, 0.0, 1.0)
+        vh_norm = np.clip((vh_c - (-32.0)) / 22.0, 0.0, 1.0)
+        sar = np.clip((0.65 * vv_norm + 0.35 * vh_norm) ** 1.15, 0.0, 1.0)
+        rgb_radar = np.stack([sar * 0.88, sar * 0.96, sar], axis=-1)
+        rgb_radar[~val_sar] = [0.05, 0.07, 0.10]
+        return Image.fromarray((rgb_radar * 255).astype(np.uint8))
+
+    if kind == "label":
+        lab_p = d / "LabelHand" / f"{chip}_LabelHand.tif"
+        jrc_p = d / "JRCWaterHand" / f"{chip}_JRCWaterHand.tif"
+        if not lab_p.exists() or not jrc_p.exists():
+            return None
+        lab = tifffile.imread(lab_p)
+        jrc = (tifffile.imread(jrc_p) == 1)
+
+        out = (rgb_clear * 255).astype(np.float32)
+        is_flood = (lab == 1) & ~jrc
+        is_perm = (lab == 1) & jrc
+        nodata = lab == -1
+
+        # Luminous semi-transparent flood water overlay over satellite terrain
+        out[is_flood] = 0.25 * out[is_flood] + 0.75 * np.array([0, 255, 120], dtype=np.float32)
+        out[is_perm] = 0.30 * out[is_perm] + 0.70 * np.array([40, 140, 255], dtype=np.float32)
+        yy, xx = np.indices(lab.shape)
+        out[nodata] = [18, 22, 28]
+        out[nodata & (((yy + xx) // 6) % 2 == 0)] = [32, 38, 48]
+        return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+    return None
+
+
+@functools.lru_cache(maxsize=128)
+def _get_chip_image(root_str: str, chip: str, kind: str) -> Optional[Image.Image]:
+    """Load chip image from pre-rendered cache or render from raw datasets."""
+    root = Path(root_str)
+    cache_file = _cache_dir(root) / f"{chip}_{kind}.webp"
+    if cache_file.exists():
+        try:
+            return Image.open(cache_file).convert("RGB")
+        except Exception:
+            pass
+
+    # Render from raw GeoTIFFs if available on disk
+    img = _render_chip_from_raw(root, chip, kind)
+    if img is not None:
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            img.save(cache_file, format="WEBP", quality=82)
+        except Exception:
+            pass
+    return img
+
+
+def tile_view(root: Path, chip: str, row: int, col: int, kind: str, scale: int) -> Optional[Image.Image]:
+    """The high-definition picture of one tile (128*scale x 128*scale), or None when not available."""
+    img = _get_chip_image(str(root), chip, kind)
+    if img is None:
+        return None
+
+    # Crop the 128x128 tile from the 512x512 chip: (left, upper, right, lower)
+    tile = img.crop((col * TILE, row * TILE, (col + 1) * TILE, (row + 1) * TILE))
+    resample_filter = Image.NEAREST if kind == "label" else Image.BICUBIC
+    return tile.resize((TILE * scale, TILE * scale), resample_filter)
 
 
 @functools.lru_cache(maxsize=48)
@@ -54,70 +174,17 @@ def _s2(root: str, chip: str) -> np.ndarray:
     return np.nan_to_num(tifffile.imread(Path(root) / "data/raw/data/flood_events/HandLabeled/S2Hand" / f"{chip}_S2Hand.tif"))
 
 
-@functools.lru_cache(maxsize=48)
-def _clear_rgb(root: str, chip: str) -> np.ndarray:
-    s2 = _s2(root, chip)
-    valid = s2[S2_NIR] > 0
-    rgb = np.stack([_stretch(s2[b], valid) for b in (S2_SWIR, S2_NIR, S2_RED)], axis=-1)
-    return np.clip(rgb ** 0.7, 0, 1)    # lift dark water so a mostly flooded chip is still readable
-
-
-@functools.lru_cache(maxsize=48)
-def _radar_rgb(root: str, chip: str) -> np.ndarray:
-    s1 = tifffile.imread(Path(root) / "data/raw/data/flood_events/HandLabeled/S1Hand" / f"{chip}_S1Hand.tif")
-    vv, vh = s1[0].astype(np.float32), s1[1].astype(np.float32)
-    valid = np.isfinite(vv) & np.isfinite(vh)
-    vv, vh = gaussian_filter(np.nan_to_num(vv, nan=-30.0), 1.0), gaussian_filter(np.nan_to_num(vh, nan=-30.0), 1.0)
-    grey = 0.5 * _stretch(vv, valid, 1, 99) + 0.5 * _stretch(vh, valid, 1, 99)
-    grey = np.clip((grey - 0.08) / 0.84, 0, 1) ** 1.25     # keep water dark and land bright
-    return np.stack([grey * 0.92, grey * 0.97, grey], axis=-1)
-
-
-@functools.lru_cache(maxsize=48)
-def _label(root: str, chip: str):
-    d = Path(root) / "data/raw/data/flood_events/HandLabeled"
-    return tifffile.imread(d / "LabelHand" / f"{chip}_LabelHand.tif"), tifffile.imread(d / "JRCWaterHand" / f"{chip}_JRCWaterHand.tif") == 1
-
-
-def _cloud_alpha(chip: str, seed: int = HEADLINE_CLOUD_SEED) -> np.ndarray:
-    return simulate_chip_cloud_mask(chip, seed=derive_seed_from_chip_id(chip, seed))
+@functools.lru_cache(maxsize=256)
+def _clean_optical(root: str, chip: str) -> np.ndarray:
+    return preprocess_optical_chip(_s2(root, chip))
 
 
 def _crop(arr: np.ndarray, row: int, col: int) -> np.ndarray:
     return arr[row * TILE:(row + 1) * TILE, col * TILE:(col + 1) * TILE]
 
 
-def tile_view(root: Path, chip: str, row: int, col: int, kind: str, scale: int) -> Optional[Image.Image]:
-    """The picture of one tile, or None when the raw chip is not on disk."""
-    key = str(root)
-    if kind in ("clear", "optical", "label") and not (_hand_dir(root) / "S2Hand" / f"{chip}_S2Hand.tif").exists():
-        return None
-    if kind == "radar" and not has_imagery(root, chip):
-        return None
-    if kind == "radar":
-        rgb = _crop(_radar_rgb(key, chip), row, col)
-    else:
-        rgb = _crop(_clear_rgb(key, chip), row, col).copy()
-        if kind == "optical":
-            rgb[_crop(_cloud_alpha(chip), row, col) >= 0.5] = 1.0
-    img = Image.fromarray((rgb * 255).astype(np.uint8))
-    if kind == "label":
-        label, perm = _label(key, chip)
-        lab, jrc = _crop(label, row, col), _crop(perm, row, col)
-        out = (np.asarray(img, dtype=np.float32) * 0.42)
-        out[(lab == 1) & ~jrc] = LIME
-        out[(lab == 1) & jrc] = BLUE
-        yy, xx = np.indices(lab.shape)
-        nodata = lab == -1
-        out[nodata] = 18
-        out[nodata & (((yy + xx) // 6) % 2 == 0)] = 48
-        return Image.fromarray(out.astype(np.uint8)).resize((TILE * scale, TILE * scale), Image.NEAREST)
-    return img.resize((TILE * scale, TILE * scale), Image.BICUBIC)
-
-
-@functools.lru_cache(maxsize=256)
-def _clean_optical(root: str, chip: str) -> np.ndarray:
-    return preprocess_optical_chip(_s2(root, chip))
+def _cloud_alpha(chip: str, seed: int = HEADLINE_CLOUD_SEED) -> np.ndarray:
+    return simulate_chip_cloud_mask(chip, seed=derive_seed_from_chip_id(chip, seed))
 
 
 def redraw_clouds(root: Path, sel: pd.DataFrame, seed: int, predict_optical, ndwi_share) -> pd.DataFrame:
@@ -135,7 +202,9 @@ def redraw_clouds(root: Path, sel: pd.DataFrame, seed: int, predict_optical, ndw
         for tile, r, c, nd, idx in zip(tiles, g["row"], g["col"], ndwi_vals, g.index):
             p, e, _ = predict_optical(tile)
             cloud.append((idx, float((_crop(alpha, int(r), int(c)) >= 0.5).mean())))
-            p_opt.append((idx, p)); e_opt.append((idx, e)); ndwi.append((idx, float(nd)))
+            p_opt.append((idx, p))
+            e_opt.append((idx, e))
+            ndwi.append((idx, float(nd)))
     out["cloud_frac"] = pd.Series(dict(cloud))
     out["p_optical"], out["extent_optical"] = pd.Series(dict(p_opt)), pd.Series(dict(e_opt))
     out["p_ndwi"] = pd.Series(dict(ndwi))

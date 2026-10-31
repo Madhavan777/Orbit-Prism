@@ -308,7 +308,9 @@ def create_app(root: Path = ROOT) -> FastAPI:
             return _clean({**info, "models": {}, "images": False, "events": []})
         info["score_source"] = S.run_info.get("score_source")
         info["models"] = {"optical": S.models.kind("optical"), "radar": S.models.kind("radar")}
-        info["images"] = any((root / "data" / "processed").glob("*.npz")) if (root / "data" / "processed").is_dir() else False
+        has_proc = any((root / "data" / "processed").glob("*.npz")) if (root / "data" / "processed").is_dir() else False
+        has_img = any((root / "data" / "imagery").glob("*.webp")) if (root / "data" / "imagery").is_dir() else False
+        info["images"] = has_proc or has_img
         ev = S.tiles.groupby("event").agg(tiles=("tile_id", "size"), critical=("critical", "sum"),
                                           split=("split", lambda s: s.mode().iloc[0]))
         info["events"] = _frame(ev.reset_index())
