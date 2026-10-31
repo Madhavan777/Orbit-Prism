@@ -1,6 +1,7 @@
 data/raw/
 data/processed/
 *.npz
+!sample_tiles/*.npz
 *.tif
 *.tiff
 results/fire/real_burn_stats.csv

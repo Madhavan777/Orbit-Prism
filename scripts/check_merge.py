@@ -57,7 +57,7 @@ def main():
             fail(f"{p}: has a UTF-8 byte-order mark")
         if path.suffix in {".py", ".csv", ".json", ".md"} and b"\r\n" in data and path.name != "satellite_data.csv":
             fail(f"{p}: has CRLF line endings (use LF)")
-        if path.suffix.lower() in FORBIDDEN_EXT or p.startswith("data/raw/") or p.startswith("data/processed/"):
+        if (path.suffix.lower() in FORBIDDEN_EXT and not p.startswith("sample_tiles/")) or p.startswith("data/raw/") or p.startswith("data/processed/"):
             fail(f"{p}: raw/processed data or model dump must not be committed")
         if len(data) > MAX_BYTES:
             fail(f"{p}: {len(data):,} bytes is over the {MAX_BYTES:,}-byte limit")
