@@ -1,0 +1,21 @@
+# Pinned to the versions the full test suite passed with (Python 3.12).
+# Core data and processing
+numpy==2.5.4
+pandas==3.1.0
+tifffile==2026.10.15
+imagecodecs==2026.10.10
+scipy==1.18.1
+
+# Models, calibration, evaluation, tests
+tensorflow==2.21.0
+keras==3.15.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+pytest==9.2.0
+
+# Website (app/api.py serves the API and the static site in web/)
+fastapi==0.162.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+pillow==13.0.0
+httpx==0.28.1
