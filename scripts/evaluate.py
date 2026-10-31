@@ -181,7 +181,7 @@ def main():
         "score_source": source, "synthetic": synthetic, "split": args.split, "tiles": len(test),
         "critical_tiles": n_crit, "scaled_pass_MB": round(mb, 4), "dial_target": args.alpha,
         "thresholds": thresholds, "scheduler": args.scheduler, "skipped": skipped,
-    }, indent=2) + "\n", newline="\n")
+    }, indent=2) + "\n")
 
     print("\n" + summary.round(3).to_string(index=False))
     print(f"\nwrote {out}")
