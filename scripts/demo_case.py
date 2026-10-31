@@ -5,7 +5,8 @@ through the scheduler at the scaled pass, and chooses the cloudy critical tile t
   - cloud_frac >= CLOUD_SWITCH (routed to radar),
   - is sent as a full tile by ORBIT-PRISM within the scaled budget,
   - is never sent by "discard cloudy", and is not sent by optical-only triage within the budget.
-Among those, the tile with the most flood water is chosen (ties broken by radar score).
+and whose hand label covers at least MIN_LABELLED of the tile, so the picture really shows the flood (some
+tiles are critical on a few hundred labelled pixels). Among those, the tile with the most flood water is chosen.
 Writes results/demo_case.json, which GET /api/demo-case serves. Every number comes from the run;
 nothing is typed in. The tile is an illustration chosen from the held-out event, not a typical tile:
 the file also reports how many cloudy critical tiles each system delivered, so the demo can be shown
@@ -19,14 +20,22 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import tifffile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from src.constants import (CLOUD_SWITCH, OPTICAL_B, SCALED_PASS_FRACTION, TEST_SPLIT)  # noqa: E402
 from src.scheduler import sim  # noqa: E402
 
+MIN_LABELLED = 0.9
+
 SYSTEMS = {"capture_order": "Capture order", "discard_cloudy": "Discard cloudy",
            "optical_only": "Optical-only triage", "orbit_prism": "ORBIT-PRISM"}
+
+
+def _labelled_share(chip: str, row: int, col: int) -> float:
+    path = ROOT / "data/raw/data/flood_events/HandLabeled/LabelHand" / f"{chip}_LabelHand.tif"
+    return float((tifffile.imread(path)[row * 128:(row + 1) * 128, col * 128:(col + 1) * 128] != -1).mean())
 
 
 def _full_tile_rank(log: pd.DataFrame, chip: str, row: int, col: int, budget: int):
@@ -63,7 +72,8 @@ def main():
     cands = []
     for r in cloudy_crit.itertuples():
         pos = {k: _full_tile_rank(logs[k], r.chip, r.row, r.col, budget) for k in SYSTEMS}
-        if pos["orbit_prism"] and not pos["discard_cloudy"] and not pos["optical_only"]:
+        if (pos["orbit_prism"] and not pos["discard_cloudy"] and not pos["optical_only"]
+                and _labelled_share(r.chip, int(r.row), int(r.col)) >= MIN_LABELLED):
             cands.append((r.water_frac, r.p_radar, r, pos))
     if not cands:
         sys.exit("no cloudy critical tile is delivered by ORBIT-PRISM and missed by both discard-cloudy "
