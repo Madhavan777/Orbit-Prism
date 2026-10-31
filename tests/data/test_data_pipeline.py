@@ -54,7 +54,7 @@ from src.data.generate_metadata import (
     validate_tiles_base_dataframe,
     compute_byte_sizes,
 )
-from src.data.dataset import EventDataset
+from src.data.dataset import EventDataset, OrbitPrismDataset
 from src.data.validate_data import validate_npz_file
 
 
@@ -242,3 +242,31 @@ def test_npz_container_and_validation():
         item = ds[0]
         assert item["optical"].shape == (128, 128, 4)
         assert item["radar"].shape == (128, 128, 2)
+
+
+def test_orbit_prism_dataset_loader():
+    """Test multi-event OrbitPrismDataset loader and split filtering."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        for ev, split in [("EventA", "train"), ("EventB", "holdout")]:
+            npz_path = tmp_dir / f"{ev}.npz"
+            n = 4
+            np.savez_compressed(
+                npz_path,
+                tile_id=np.array([f"{ev}_C{i}_0_0" for i in range(n)]),
+                optical=np.zeros((n, 128, 128, 4), dtype=np.uint8),
+                radar=np.ones((n, 128, 128, 2), dtype=np.uint8),
+                water_frac=np.full(n, 0.4, dtype=np.float32),
+                cloud_frac=np.full(n, 0.1, dtype=np.float32),
+                split=np.array([split] * n),
+                critical=np.ones(n, dtype=np.int32),
+            )
+
+        ds_train = OrbitPrismDataset(processed_dir=tmp_dir, split="train", modality="radar")
+        assert len(ds_train) == 4
+        assert ds_train.vv.shape == (4, 128, 128)
+        assert ds_train.vh.shape == (4, 128, 128)
+        assert ds_train.critical.sum() == 4
+
+        ds_test = OrbitPrismDataset(processed_dir=tmp_dir, split="test", modality="radar")
+        assert len(ds_test) == 4

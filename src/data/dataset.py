@@ -81,6 +81,8 @@ def process_event_chips(
     radar_list: List[np.ndarray] = []
     water_frac_list: List[float] = []
     cloud_frac_list: List[float] = []
+    split_list: List[str] = []
+    critical_list: List[int] = []
     metadata_records: List[Dict[str, Union[str, int, float]]] = []
 
     total_generated = 0
@@ -159,6 +161,8 @@ def process_event_chips(
                 radar_list.append(rad_dict[t_id])
                 water_frac_list.append(wf)
                 cloud_frac_list.append(sim_cf)
+                split_list.append(split_name)
+                critical_list.append(crit)
 
                 rec = build_tile_record(
                     event=event_name,
@@ -180,6 +184,8 @@ def process_event_chips(
     arr_radar = np.stack(radar_list, axis=0) if radar_list else np.empty((0, 128, 128, 2), dtype=np.uint8)
     arr_water_frac = np.array(water_frac_list, dtype=np.float32)
     arr_cloud_frac = np.array(cloud_frac_list, dtype=np.float32)
+    arr_split = np.array(split_list, dtype=str)
+    arr_critical = np.array(critical_list, dtype=np.int32)
 
     # Save compressed NPZ
     np.savez_compressed(
@@ -189,6 +195,8 @@ def process_event_chips(
         radar=arr_radar,
         water_frac=arr_water_frac,
         cloud_frac=arr_cloud_frac,
+        split=arr_split,
+        critical=arr_critical,
     )
 
     counts = {
@@ -241,14 +249,138 @@ class EventDataset:
     def cloud_frac(self) -> np.ndarray:
         return self._data["cloud_frac"]
 
+    @property
+    def split(self) -> Optional[np.ndarray]:
+        return self._data["split"] if "split" in self._data else None
+
+    @property
+    def critical(self) -> Optional[np.ndarray]:
+        return self._data["critical"] if "critical" in self._data else (self.water_frac >= 0.30).astype(np.int32)
+
     def __len__(self) -> int:
         return len(self.tile_id)
 
-    def __getitem__(self, idx: int) -> Dict[str, Union[str, np.ndarray, float]]:
-        return {
+    def __getitem__(self, idx: int) -> Dict[str, Union[str, np.ndarray, float, int]]:
+        item = {
             "tile_id": str(self.tile_id[idx]),
             "optical": self.optical[idx],
             "radar": self.radar[idx],
             "water_frac": float(self.water_frac[idx]),
             "cloud_frac": float(self.cloud_frac[idx]),
+            "critical": int(self.critical[idx]) if self.critical is not None else int(self.water_frac[idx] >= 0.30),
         }
+        if self.split is not None:
+            item["split"] = str(self.split[idx])
+        return item
+
+
+class OrbitPrismDataset:
+    """Unified multi-event dataset loader for CNN training and calibration.
+
+    Aggregates tiles across processed event NPZ files and filters by split:
+    - 'train': Training split
+    - 'valid' or 'calibration': Validation/calibration split
+    - 'holdout' or 'test': Held-out evaluation (Bolivia)
+    - 'all': All available tiles
+
+    Provides easy channel access:
+    - .vv: (N, 128, 128) uint8 Sentinel-1 VV channel
+    - .vh: (N, 128, 128) uint8 Sentinel-1 VH channel
+    - .radar: (N, 128, 128, 2) uint8 [VV, VH]
+    - .optical: (N, 128, 128, 4) uint8 [B2, B3, B4, B8]
+    - .water_frac: (N,) float32 continuous flood label
+    - .critical: (N,) int32 binary label (water_frac >= 0.30)
+    """
+
+    def __init__(
+        self,
+        processed_dir: Union[str, Path] = DEFAULT_PROCESSED_DIR,
+        split: Optional[str] = None,
+        modality: str = "radar",
+    ):
+        self.processed_dir = Path(processed_dir)
+        self.split_filter = split
+        self.modality = modality
+
+        tile_ids = []
+        radar_list = []
+        optical_list = []
+        water_fracs = []
+        critical_list = []
+        event_list = []
+        split_list = []
+
+        npz_files = sorted(self.processed_dir.glob("*.npz"))
+        if not npz_files:
+            raise FileNotFoundError(f"No processed NPZ files found in {self.processed_dir}")
+
+        for npz_path in npz_files:
+            ev_name = npz_path.stem
+            ev_data = np.load(npz_path)
+
+            ev_splits = ev_data["split"] if "split" in ev_data else np.array(["holdout" if ev_name == "Bolivia" else "train"] * len(ev_data["tile_id"]))
+
+            if self.split_filter is not None and self.split_filter != "all":
+                if self.split_filter == "test":
+                    mask = np.isin(ev_splits, ["test", "holdout"])
+                elif self.split_filter == "calibration":
+                    mask = np.isin(ev_splits, ["valid", "calibration"])
+                else:
+                    mask = (ev_splits == self.split_filter)
+            else:
+                mask = np.ones(len(ev_splits), dtype=bool)
+
+            if not np.any(mask):
+                continue
+
+            tile_ids.extend(ev_data["tile_id"][mask].tolist())
+            water_fracs.extend(ev_data["water_frac"][mask].tolist())
+            if "critical" in ev_data:
+                critical_list.extend(ev_data["critical"][mask].tolist())
+            else:
+                critical_list.extend((ev_data["water_frac"][mask] >= 0.30).astype(int).tolist())
+            event_list.extend([ev_name] * int(mask.sum()))
+            split_list.extend(ev_splits[mask].tolist())
+
+            if modality in ["radar", "both"]:
+                radar_list.append(ev_data["radar"][mask])
+            if modality in ["optical", "both"]:
+                optical_list.append(ev_data["optical"][mask])
+
+        self.tile_id = np.array(tile_ids, dtype=str)
+        self.water_frac = np.array(water_fracs, dtype=np.float32)
+        self.critical = np.array(critical_list, dtype=np.int32)
+        self.event = np.array(event_list, dtype=str)
+        self.split = np.array(split_list, dtype=str)
+
+        self.radar = np.concatenate(radar_list, axis=0) if radar_list else np.empty((0, 128, 128, 2), dtype=np.uint8)
+        self.optical = np.concatenate(optical_list, axis=0) if optical_list else np.empty((0, 128, 128, 4), dtype=np.uint8)
+
+    @property
+    def vv(self) -> np.ndarray:
+        """Sentinel-1 VV polarization channel (N, 128, 128) uint8."""
+        return self.radar[:, :, :, 0]
+
+    @property
+    def vh(self) -> np.ndarray:
+        """Sentinel-1 VH polarization channel (N, 128, 128) uint8."""
+        return self.radar[:, :, :, 1]
+
+    def __len__(self) -> int:
+        return len(self.tile_id)
+
+    def __getitem__(self, idx: int) -> Dict[str, Union[str, np.ndarray, float, int]]:
+        res = {
+            "tile_id": self.tile_id[idx],
+            "water_frac": self.water_frac[idx],
+            "critical": self.critical[idx],
+            "event": self.event[idx],
+            "split": self.split[idx],
+        }
+        if len(self.radar) > 0:
+            res["radar"] = self.radar[idx]
+            res["vv"] = self.vv[idx]
+            res["vh"] = self.vh[idx]
+        if len(self.optical) > 0:
+            res["optical"] = self.optical[idx]
+        return res
