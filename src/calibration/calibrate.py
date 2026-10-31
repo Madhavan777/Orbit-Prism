@@ -29,6 +29,18 @@ DEFAULT_RADAR_SCORES = ROOT_DIR / "results" / "scores_radar_int8.csv"
 DEFAULT_OUTPUT_JSON = ROOT_DIR / "results" / "calibration.json"
 
 
+def _read_scores(path: Path) -> pd.DataFrame:
+    """Read a score file in either team layout: tile_id,p_flood,extent (tile_id = <chip>_<row>_<col>)
+    or chip,row,col,p_flood,extent. Returns a frame that always has chip, row, col."""
+    df = pd.read_csv(path)
+    if not {"chip", "row", "col"} <= set(df.columns):
+        if "tile_id" not in df.columns:
+            raise SystemExit(f"{path.name}: expected a tile_id column or chip,row,col columns")
+        parts = df["tile_id"].astype(str).str.rsplit("_", n=2, expand=True)
+        df["chip"], df["row"], df["col"] = parts[0], parts[1].astype(int), parts[2].astype(int)
+    return df
+
+
 def load_dataset_for_calibration(
     tiles_base_path: Path = DEFAULT_TILES_BASE,
     optical_scores_path: Path = DEFAULT_OPTICAL_SCORES,
@@ -43,8 +55,8 @@ def load_dataset_for_calibration(
     if optical_scores_path.exists() and radar_scores_path.exists() and tiles_base_path.exists():
         logger.info("Integrating real model predictions: %s and %s", optical_scores_path.name, radar_scores_path.name)
         base_df = pd.read_csv(tiles_base_path)
-        opt_df = pd.read_csv(optical_scores_path)
-        rad_df = pd.read_csv(radar_scores_path)
+        opt_df = _read_scores(optical_scores_path)
+        rad_df = _read_scores(radar_scores_path)
 
         # Merge optical and radar scores
         # optical scores apply where sensor_used == 'optical', radar where sensor_used == 'radar'
@@ -61,6 +73,10 @@ def load_dataset_for_calibration(
                 p_floods.append(rad_map.get(key, np.nan))
 
         merged["p_flood"] = p_floods
+        n_missing = int(merged["p_flood"].isna().sum())
+        if n_missing:
+            raise SystemExit(f"{n_missing} tiles have no score for their sensor path; the score files must "
+                             "cover every tile in tiles_base.csv (run scripts/quantize_and_score.py on all events)")
         return merged, "real_model_predictions (scores_optical_int8.csv + scores_radar_int8.csv)"
 
     if fallback_fake_path.exists():
