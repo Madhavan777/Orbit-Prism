@@ -232,7 +232,7 @@
   <div class="card" style="margin-top:20px">
     <h3>Fits in 4.2 MB onboard SRAM?</h3>
     <div class="tablewrap" id="memory"></div>
-    <p class="small muted">Peak activation is estimated, weights are measured. Recall and ECE are on the validation split.</p>
+    <p class="small muted">Peak activation is estimated, weights are measured. Recall and ECE are on the validation split, at the float model's 90%-recall threshold. Radar INT8 recall of 1 means that threshold keeps almost every tile (INT8 radar scores are compressed upward), not a better model; the dial above is the real test.</p>
   </div>
 
   <div class="card" id="democase" style="margin-top:20px" hidden></div>
