@@ -6,6 +6,7 @@ Target: TinyML deployment (~100 KB or less weights), INT8-compatible operations.
 
 from typing import Tuple, Dict, Any, Optional
 import os
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -190,10 +191,17 @@ def compile_optical_model(
     return model
 
 
-def calculate_model_memory(model: keras.Model) -> Dict[str, Any]:
-    """Calculate parameter counts and estimated model size.
+def calculate_model_memory(model: keras.Model, batch_size: int = 1) -> Dict[str, Any]:
+    """Calculate parameter counts, weight size, and peak activation footprint.
 
-    Target: < 100 KB weights for TinyML deployment.
+    Target: < 100 KB weights for TinyML deployment, compatible with Harish's INT8 pipeline.
+
+    Args:
+        model: Keras model instance.
+        batch_size: Batch size for activation memory calculation (default 1 for edge inference).
+
+    Returns:
+        Dict containing parameter counts, estimated sizes, and activation memory footprint.
     """
     total_params = model.count_params()
     trainable_params = int(np.sum([keras.backend.count_params(p) for p in model.trainable_weights]))
@@ -202,14 +210,56 @@ def calculate_model_memory(model: keras.Model) -> Dict[str, Any]:
     float32_kb = (total_params * 4) / 1024.0
     int8_kb = (total_params * 1) / 1024.0
 
+    # Calculate activation tensor sizes for peak SRAM estimation on MCU
+    activation_elements = 0
+    peak_layer_elements = 0
+    for layer in model.layers:
+        output_shape = getattr(layer, "output_shape", getattr(layer, "shape", None))
+        if output_shape is None:
+            continue
+        if isinstance(output_shape, list):
+            for s in output_shape:
+                if s is not None:
+                    elements = int(np.prod([dim for dim in s if dim is not None]))
+                    activation_elements += elements
+                    peak_layer_elements = max(peak_layer_elements, elements)
+        else:
+            elements = int(np.prod([dim for dim in output_shape if dim is not None]))
+            activation_elements += elements
+            peak_layer_elements = max(peak_layer_elements, elements)
+
+    peak_activation_float32_kb = (peak_layer_elements * 4 * batch_size) / 1024.0
+    peak_activation_int8_kb = (peak_layer_elements * 1 * batch_size) / 1024.0
+
     return {
         "total_params": total_params,
         "trainable_params": trainable_params,
         "non_trainable_params": non_trainable_params,
         "float32_size_kb": round(float32_kb, 2),
         "int8_size_kb": round(int8_kb, 2),
-        "within_100kb_budget": float32_kb <= 100.0
+        "within_100kb_budget": float32_kb <= 100.0,
+        "peak_activation_float32_kb": round(peak_activation_float32_kb, 2),
+        "peak_activation_int8_kb": round(peak_activation_int8_kb, 2),
+        "total_activation_elements": activation_elements
     }
+
+
+def save_optical_float_model(model: keras.Model, filepath: str = "models/optical_float.keras") -> str:
+    """Save the unquantized float32 optical model for evaluation and handoff to Harish.
+
+    Args:
+        model: Trained or compiled optical model.
+        filepath: Destination file path.
+
+    Returns:
+        Canonical saved model path.
+    """
+    out_path = Path(filepath)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    model.save(str(out_path))
+    actual_size_kb = out_path.stat().st_size / 1024.0
+    print(f"[Optical] Model successfully saved to {out_path} ({actual_size_kb:.2f} KB)")
+    return str(out_path)
 
 
 def ndwi_baseline_predict(images: np.ndarray, green_idx: int = 1, nir_idx: int = 3, threshold: float = 0.0) -> Tuple[np.ndarray, np.ndarray]:

@@ -17,6 +17,7 @@ from src.models.optical import (
     build_optical_model,
     compile_optical_model,
     calculate_model_memory,
+    save_optical_float_model,
     ndwi_baseline_predict,
     setup_gpu
 )
@@ -115,6 +116,21 @@ def test_ndwi_baseline_fallback():
     assert extent.shape == (batch_size, 1)
     assert extent[0, 0] > 0.9  # Should identify high water fraction
     assert p_flood[0, 0] > 0.9  # Should trigger flood probability
+
+
+def test_model_save_and_reload(tmp_path):
+    """Test saving optical_float.keras and verifying loaded model."""
+    model = build_optical_model()
+    compile_optical_model(model)
+
+    save_path = tmp_path / "optical_float_test.keras"
+    saved_file = save_optical_float_model(model, filepath=str(save_path))
+    assert Path(saved_file).exists()
+    assert Path(saved_file).stat().st_size > 0
+
+    reloaded_model = tf.keras.models.load_model(saved_file)
+    assert reloaded_model.input_shape == (None, 128, 128, 4)
+    assert len(reloaded_model.outputs) == 2
 
 
 if __name__ == "__main__":
