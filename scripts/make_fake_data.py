@@ -32,10 +32,12 @@ CLOUD_SWITCH = 0.5
 SEED = 7
 
 # p_flood = sigmoid(SLOPE * (water_frac - CRITICAL_THRESHOLD) + noise)
-SLOPE = 10.0
-OPTICAL_NOISE_CLEAR, OPTICAL_NOISE_CLOUD = 0.5, 4.0  # sd at cloud_frac 0 / 1
-RADAR_NOISE = 1.2                                     # independent of cloud
-EXTENT_NOISE = 0.05
+SLOPE = 5.0
+OPTICAL_NOISE_CLEAR, OPTICAL_NOISE_CLOUD = 1.0, 5.0  # sd at cloud_frac 0 / 1
+RADAR_NOISE = 1.8                                     # independent of cloud
+RADAR_FALSE_ALARM = (0.06, 2.0)  # (probability, logit boost): smooth tarmac/sand looks like water
+EVENT_SHIFT_SD = 0.5             # per-event logit offset, so held-out Bolivia is not in-distribution
+EXTENT_NOISE = 0.12
 
 
 def sigmoid(x):
@@ -49,6 +51,8 @@ def main():
 
     chip_cloud = {c: rng.beta(0.7, 1.0) for c in sorted({r["chip"] for r in rows})}
 
+    event_shift = {e: rng.normal(0, EVENT_SHIFT_SD) for e in sorted({r["event"] for r in rows})}
+
     out = []
     for r in rows:
         wf = float(r["water_frac"])
@@ -56,7 +60,10 @@ def main():
         sensor = "radar" if cloud >= CLOUD_SWITCH else "optical"
         sd = RADAR_NOISE if sensor == "radar" else (
             OPTICAL_NOISE_CLEAR + (OPTICAL_NOISE_CLOUD - OPTICAL_NOISE_CLEAR) * cloud)
-        p = float(sigmoid(SLOPE * (wf - CRITICAL_THRESHOLD) + rng.normal(0, sd)))
+        logit = SLOPE * (wf - CRITICAL_THRESHOLD) + event_shift[r["event"]] + rng.normal(0, sd)
+        if sensor == "radar" and rng.random() < RADAR_FALSE_ALARM[0]:
+            logit += RADAR_FALSE_ALARM[1]
+        p = float(sigmoid(logit))
         extent = float(np.clip(wf + rng.normal(0, EXTENT_NOISE), 0, 1))
         out.append([r["event"], r["chip"], int(r["row"]), int(r["col"]), r["split"],
                     round(wf, 4), int(wf >= CRITICAL_THRESHOLD), round(cloud, 4),
