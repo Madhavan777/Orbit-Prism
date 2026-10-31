@@ -96,29 +96,29 @@ Evaluated on the disjoint **EARLY-STOPPING set** (training-split tiles from `Spa
 - **Engineering Verdict**: Class weighting significantly degrades AUROC on unseen events. The multi-task network already receives dense flood supervision via the continuous `extent` auxiliary head (MSE loss). Exaggerating the binary cross-entropy gradient overfits rare flood tiles and impairs generalization across novel geographic regions. The superior unweighted model was therefore preserved.
 
 ### Old vs. New Calibration Comparison (Valid Split, Routed Tiles)
-| Metric | Pre-Fix (First 100 Tiles) | Post-Fix (600 Stratified Tiles) | Delta / Change |
+| Metric | Pre-Fix (First 100 Tiles) | Post-Fix (600 Stratified Tiles, Hazy) | Opaque Clouds Headline (600 Stratified Tiles) |
 | :--- | :---: | :---: | :---: |
-| **Optical Float AUROC** | 0.9569 | **0.9625** | +0.0056 (Shenbaga final model) |
-| **Optical INT8 AUROC** | 0.9350 | **0.9631** | **+0.0281** (Exceeds float) |
-| **Optical Shared-Threshold Recall** | 0.4342 (fixed 0.5) | **0.8553** (at float 90% thr 0.2227) | Operational threshold |
-| **Radar Float AUROC** | 0.9605 | **0.9605** | Baseline |
-| **Radar INT8 AUROC** | 0.9558 | **0.9570** | **+0.0012** (Within 0.0035 of float) |
-| **Radar Shared-Threshold Recall** | 0.0000 (fixed 0.5) | **1.0000** (at float 90% thr 0.0755) | Operational threshold |
-| **Radar INT8 Distinct Levels** | 53 | **62** | +9 levels |
-| **Optical INT8 Distinct Levels** | 78 | **105** | +27 levels |
+| **Optical Float AUROC** | 0.9569 | 0.9625 | **0.9569** (Shenbaga opaque model) |
+| **Optical INT8 AUROC** | 0.9350 | 0.9631 | **0.9555** (Within 0.0014 of float) |
+| **Optical Shared-Threshold Recall** | 0.4342 (fixed 0.5) | 0.8553 (thr 0.2227) | **0.8816** (at float 90% thr 0.1592) |
+| **Radar Float AUROC** | 0.9605 | 0.9605 | **0.9605** (Reproduced exactly) |
+| **Radar INT8 AUROC** | 0.9558 | 0.9570 | **0.9570** (Reproduced exactly) |
+| **Radar Shared-Threshold Recall** | 0.0000 (fixed 0.5) | 1.0000 (thr 0.0755) | **1.0000** (Reproduced exactly) |
+| **Radar INT8 Distinct Levels** | 53 | 62 | **62** (Reproduced exactly) |
+| **Optical INT8 Distinct Levels** | 78 | 105 | **115** (+10 levels) |
 
 ### Full Measured Performance & Acceptance Targets (Valid Split, Routed Tiles)
 Evaluated on tiles routed to each model (`cloud_frac < 0.5` for Optical, `cloud_frac >= 0.5` for Radar):
 
-#### Optical Model (`cloud_frac < 0.5`, 776 tiles, 76 critical)
-- **Float**: AUROC = `0.9625`, Recall @ 90% Threshold (`0.2227`) = `0.8947`, ECE = `0.0384`
-- **INT8**: AUROC = `0.9631`, Recall @ Shared Threshold (`0.2227`) = `0.8553`, ECE = `0.0569`
+#### Optical Model (`cloud_frac < 0.5`, 776 tiles, 76 critical — Opaque Clouds Headline)
+- **Float**: AUROC = `0.9569`, Recall @ 90% Threshold (`0.1592`) = `0.8947`, ECE = `0.0318`
+- **INT8**: AUROC = `0.9555`, Recall @ Shared Threshold (`0.1592`) = `0.8816`, ECE = `0.0554`
 - **Drift & Correlation**:
-  - Spearman Rank Correlation: `0.9777` (Target `>= 0.98`, missed by `0.0023`)
-  - Mean $|diff|$: `0.0523`, Max $|diff|$: `0.3387`
-  - Distinct INT8 Score Levels: `105` (Target `>= 50`: **PASSED**)
-  - AUROC Delta: `+0.0006` (Target within `0.01`: **PASSED**)
-  - Recall Delta: `-0.0394` (Target within `0.05`: **PASSED**)
+  - Spearman Rank Correlation: `0.9724` (Target `>= 0.98`, missed by `0.0076`)
+  - Mean $|diff|$: `0.0500`, Max $|diff|$: `0.3281`
+  - Distinct INT8 Score Levels: `115` (Target `>= 50`: **PASSED**)
+  - AUROC Delta: `-0.0014` (Target within `0.01`: **PASSED**)
+  - Recall Delta: `-0.0131` (Target within `0.05`: **PASSED**)
 
 #### Radar Model (`cloud_frac >= 0.5`, 578 tiles, 42 critical)
 - **Float**: AUROC = `0.9605`, Recall @ 90% Threshold (`0.0755`) = `0.8810`, ECE = `0.0362`
@@ -129,6 +129,7 @@ Evaluated on tiles routed to each model (`cloud_frac < 0.5` for Optical, `cloud_
   - Distinct INT8 Score Levels: `62` (Target `>= 50`: **PASSED**)
   - AUROC Delta: `-0.0035` (Target within `0.01`: **PASSED**)
   - Recall Delta: `+0.1190` (Target within `0.05`: **PASSED**)
+  - *Radar is unchanged by simulated cloud opacity, so all metrics reproduced identically.*
 
 #### Target Miss Investigation (Radar Spearman = 0.8997)
 1. **Calibration Sample Size**: Scaled from 100 to 600 tiles across 10 events. Increased distinct score levels from 53 to 62.
@@ -144,8 +145,8 @@ All memory values are conservative estimates for isolated neural network inferen
 
 | Model | Dtype | Weights (B) | Peak Activation (B) [ESTIMATED] | Tile Buffer (B) | Total SRAM (B) | MACs | Recall (Shared Thr) | ECE | Basis |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Optical** | FLOAT32 | 61,680 | 393,216 | 65,536 | 520,432 | 4,128,832 | 0.8947 | 0.0384 | `trained_model_file` |
-| **Optical** | INT8 | 15,696 | 327,680 | 65,536 | 408,912 | 4,128,832 | 0.8553 | 0.0569 | `trained_model_file` |
+| **Optical** | FLOAT32 | 61,680 | 393,216 | 65,536 | 520,432 | 4,128,832 | 0.8947 | 0.0318 | `trained_model_file` |
+| **Optical** | INT8 | 15,696 | 327,680 | 65,536 | 408,912 | 4,128,832 | 0.8816 | 0.0554 | `trained_model_file` |
 | **Radar** | FLOAT32 | 61,104 | 262,144 | 32,768 | 356,016 | 5,308,480 | 0.8810 | 0.0362 | `trained_model_file` |
 | **Radar** | **INT8** | **15,552** | **65,536** | **32,768** | **113,856** | **5,308,480** | **1.0000** | **0.1066** | `trained_model_file` |
 

@@ -14,8 +14,8 @@ Owner: **Harish D** (Branch: `harish/radar-compress`)
 ## 3. Current Memory Table
 ```csv
 model,dtype,weights_bytes,peak_activation_bytes,tile_buffer_bytes,total_bytes,macs,recall,ece,basis
-Optical,FLOAT32,61680,393216,65536,520432,4128832,0.8947,0.0384,trained_model_file
-Optical,INT8,15696,327680,65536,408912,4128832,0.8553,0.0569,trained_model_file
+Optical,FLOAT32,61680,393216,65536,520432,4128832,0.8947,0.0318,trained_model_file
+Optical,INT8,15696,327680,65536,408912,4128832,0.8816,0.0554,trained_model_file
 Radar,FLOAT32,61104,262144,32768,356016,5308480,0.881,0.0362,trained_model_file
 Radar,INT8,15552,65536,32768,113856,5308480,1.0,0.1066,trained_model_file
 
