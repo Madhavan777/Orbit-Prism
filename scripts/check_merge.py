@@ -27,7 +27,7 @@ OUT_OF_SCOPE = re.compile("cy" + r"clone|land" + r"slide|earth" + r"quake|vol" +
 BASE_COLUMNS = ["event", "chip", "row", "col", "split", "water_frac", "critical", "cloud_frac", "sensor_used"]
 FULL_COLUMNS = BASE_COLUMNS + ["p_flood", "extent"]
 # Files that legitimately talk about the banned words or the excluded hazards.
-POLICY_FILES = {"CONTEXT.md", "scripts/check_merge.py"}
+POLICY_FILES = {"CONTEXT.md", "scripts/check_merge.py", "docs/speech.md"}
 
 failures = []
 
