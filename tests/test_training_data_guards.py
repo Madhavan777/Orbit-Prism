@@ -104,6 +104,29 @@ def test_early_stopping_uses_held_back_events_not_the_calibration_split(tmp_path
     assert "falls back" not in out
 
 
+def test_int8_calibration_sample_spans_events_and_includes_flood_tiles():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("qs", ROOT / "scripts" / "quantize_and_score.py")
+    qs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(qs)
+
+    class FakeDS:  # 5 events in file order, 1000 train tiles each, 7% critical
+        pass
+    ds = FakeDS()
+    ds.event = np.repeat(np.array(["Ghana", "India", "Mekong", "Nigeria", "USA"]), 1000)
+    rng = np.random.default_rng(0)
+    ds.critical = (rng.random(5000) < 0.07).astype(int)
+    mask = np.ones(5000, dtype=bool)
+
+    idx = qs.calibration_sample(ds, mask)
+    assert len(idx) == 600 and len(set(idx)) == 600                    # no repeats
+    assert set(ds.event[idx]) == set(ds.event)                         # every event is represented
+    assert ds.critical[idx].sum() >= 200                               # flood tiles are over-sampled
+    assert not np.array_equal(idx, np.sort(idx))                       # shuffled, not file order
+    assert np.array_equal(idx, qs.calibration_sample(ds, mask))        # deterministic
+    assert mask[idx].all()
+
+
 def test_trainer_stops_when_calibration_split_is_missing(tmp_path):
     data = tmp_path / "processed"
     data.mkdir()
