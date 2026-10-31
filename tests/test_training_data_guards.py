@@ -83,6 +83,50 @@ def test_radar_loader_reads_every_event_file(tmp_path, monkeypatch):
     assert not matched[matched["split"] == "train"]["event"].eq("Bolivia").any()
 
 
+def test_early_stopping_uses_held_back_events_not_the_calibration_split(tmp_path):
+    from src.constants import INTERNAL_VAL_EVENTS
+    from src.models import radar
+    import inspect
+    radar_default = inspect.signature(radar.train_radar_pipeline).parameters["internal_val_events"].default
+    assert tuple(radar_default) == tuple(INTERNAL_VAL_EVENTS)         # both models hold back the same events
+
+    data = tmp_path / "processed"
+    data.mkdir()
+    _write_event(data, "Bolivia", ["holdout"], seed=1)
+    _write_event(data, "Ghana", ["train", "valid"], seed=2)
+    _write_event(data, "Spain", ["train", "valid"], seed=3)          # an internal-validation event
+    res = _run_train(data, tmp_path)
+    out = res.stdout + res.stderr
+    assert res.returncode == 0, out[-2000:]
+    assert "TRAIN Set (cloud_frac < 0.5): 8 samples" in out          # Ghana train only; Spain train held back
+    assert "EARLY-STOPPING Set" in out and ": 8 samples" in out.split("EARLY-STOPPING Set")[1].splitlines()[0]
+    assert "CAL/VAL Set: 16 samples" in out                          # both events' valid tiles, untouched
+    assert "falls back" not in out
+
+
+def test_int8_calibration_sample_spans_events_and_includes_flood_tiles():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("qs", ROOT / "scripts" / "quantize_and_score.py")
+    qs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(qs)
+
+    class FakeDS:  # 5 events in file order, 1000 train tiles each, 7% critical
+        pass
+    ds = FakeDS()
+    ds.event = np.repeat(np.array(["Ghana", "India", "Mekong", "Nigeria", "USA"]), 1000)
+    rng = np.random.default_rng(0)
+    ds.critical = (rng.random(5000) < 0.07).astype(int)
+    mask = np.ones(5000, dtype=bool)
+
+    idx = qs.calibration_sample(ds, mask)
+    assert len(idx) == 600 and len(set(idx)) == 600                    # no repeats
+    assert set(ds.event[idx]) == set(ds.event)                         # every event is represented
+    assert ds.critical[idx].sum() >= 200                               # flood tiles are over-sampled
+    assert not np.array_equal(idx, np.sort(idx))                       # shuffled, not file order
+    assert np.array_equal(idx, qs.calibration_sample(ds, mask))        # deterministic
+    assert mask[idx].all()
+
+
 def test_trainer_stops_when_calibration_split_is_missing(tmp_path):
     data = tmp_path / "processed"
     data.mkdir()

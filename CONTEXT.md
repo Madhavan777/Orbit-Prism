@@ -50,6 +50,8 @@ Design notes:
 7. **Optical-only baseline, real pipeline:** the same optical model scores cloudy tiles on the simulated-cloud pixels. That is what a system without radar would do. `scripts/baselines.py` only approximates it by treating cloudy tiles as blind.
 8. **Permanent-water removal matters.** Subtracting the JRC layer turns 280 of 6,825 tiles (4.1%) from critical to non-critical, and permanent-water pixels stay in the denominator. Anyone rebuilding labels must do the same.
 
+9. **Simulated clouds are opaque (decided 2026-10-31).** Pixels inside the cloud mask (alpha >= 0.5) are pure white in the optical tiles; the old semi-transparent haze let optical models read through heavy cloud (AUROC 0.93 on 75-100% cloud tiles, against 0.79 when opaque) and hid the reason for the radar fallback. `cloud_frac`, routing, splits and `tiles_base.csv` are unchanged; the optical pixels, the optical model, its scores and everything downstream are rebuilt. The soft-cloud numbers are reported as a labelled sensitivity result, never as the headline.
+
 ## Scope (decided by Madhavan, 2026-10-31)
 
 - **In scope: floods (primary, fully measured) and forest fires (second hazard).**
@@ -96,9 +98,13 @@ A tile is identified by `tile_id = <chip>_<row>_<col>`, equal to `chip, row, col
 | `results/calibration.json` | Agnel | made by `python -m src.calibration.calibrate` from REAL scores only. `{"version": 1, "calibration_split": "valid", "method": "split_conformal", "optical": {"0.05": t, ...}, "radar": {...}, "threshold_score_space": "raw_p_flood", "score_source": "...", "isotonic_knots": {...}}`. Keep a tile when raw `p_flood >= t`. A threshold of 0.0 means "send everything" (too few calibration tiles for that miss rate). Not committed until it is made from real scores |
 | `results/memory_table.csv` | Harish | `model, dtype, weights_bytes, peak_activation_bytes, tile_buffer_bytes, total_bytes, macs, recall, ece, basis`. `total_bytes = weights + peak activation + staged tile buffer` (conservative) and must be <= 4,200,000. `recall` and `ece` are `NOT_MEASURED` until a trained model is evaluated; `basis` is `untrained_architecture` or `trained_model_file` |
 | `data/tiles.csv` | Madhavan | the 11-column schema, built by `scripts/merge_scores.py` from the INT8 score files only. The script refuses to run on synthetic scores (`--allow-placeholder` writes the git-ignored `data/tiles_placeholder.csv` for plumbing tests) |
+| `data/tiles_all.csv` | Madhavan | `tiles.csv` plus `p_optical, extent_optical, p_radar, extent_radar` (and `p_ndwi` when `results/scores_ndwi.csv` exists): every model's score on EVERY tile, which the optical-only baseline, the colour-index baseline and the no-radar ablation need. Written by `scripts/merge_scores.py` next to `tiles.csv` |
+| `results/headline.png`, `headline_dark.png`, `ablations.png`, `summary.csv`, `dial.csv`, `curves.csv`, `run_info.json` | Madhavan | made by `python scripts/evaluate.py` from `tiles_all.csv` and a real `calibration.json`. A placeholder run (`--allow-placeholder`) writes to the git-ignored `results/synthetic/` and stamps the plots "SYNTHETIC PLACEHOLDER SCORES: NOT RESULTS". `curves.csv` is the table view of the plot |
 | send log from `src.scheduler.sim.run` | Akhilesh | `order, chip, row, col, layer, bytes, cum_bytes, pass_index`, where `layer` is `L0`, `L1` or `L2` |
 
-`src.scheduler.sim.run(tiles, policy, budget_bytes)` takes a DataFrame in the 11-column schema, a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism`, and a per-pass byte budget, and returns the send log. Shared constants live in `src/constants.py`. The L1 preview size is provisional at 2,048 B (in `src/data/generate_metadata.py`); Akhilesh confirms it in `src/constants.py`.
+Until `src/scheduler/sim.py` exists, `src/evaluation/reference_policies.py` is a clearly labelled stand-in that produces send logs for the five systems and two ablations (alerts then full tiles, no L1 previews); `scripts/evaluate.py --scheduler sim` switches to the real one. The evaluation metrics (`src/evaluation/metrics.py`) work on any send log in the format above.
+
+`src.scheduler.sim.run(tiles, policy, budget_bytes, thresholds=None)` takes a DataFrame (the 11-column schema, plus `p_optical` and `p_ndwi` for the baselines that need them), a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism | orbit_no_radar | orbit_no_dial`, a per-pass byte budget, and the dial thresholds `{"optical": t, "radar": t}` (raw `p_flood` cut-offs from `calibration.json`; only the orbit policies use them), and returns the send log, sending over as many passes as it takes to empty the queue. `cum_bytes` counts bytes sent so far across passes (idle time between passes is not counted). Shared constants live in `src/constants.py`. Packet definitions (all in `src/constants.py` and `src/scheduler/sim.py`): L0 alert 32 B (`build_l0_alert_packet` and `decode_l0_alert_packet`; the event index, chip number, tile row and column, sensor, hazard, probability, extent, priority, pass, sequence, tile size and a CRC-16/XMODEM checksum, lossless for every chip id); L1 preview 2,048 B = the tile downsampled 4x to 32x32 pixels, 2 bands (optical green and near-infrared, radar VV and VH), 8 bits; L2 the full tile. Scheduler memory is counted honestly: `peak_queue_bytes` = peak queue entries x `QUEUE_ENTRY_B` (12 B per entry, references only, pixels stay in flash), `peak_queue_payload_bytes` is the payload waiting in flash (not SRAM), and `onboard_scheduler_bytes` = queue + the 1-bit coverage bitmap.
 
 ## Known limitations (stated, not hidden)
 
@@ -108,6 +114,17 @@ A tile is identified by `tile_id = <chip>_<row>_<col>`, equal to `chip, row, col
 - **Isotonic ECE and Brier values are in-sample** (saved as `probability_calibration_metrics_in_sample`). Report held-out values separately.
 - **The miss-rate promise holds only if the test data resembles the calibration data.** Bolivia is a different event, so the achieved miss rate there is measured and reported, whatever it is.
 - **Fire is not loaded.** See Hazards.
+
+## Website (`app/` and `web/`)
+
+One process serves the JSON API and the static site: `python -m uvicorn app.api:app --port 8000`, then http://localhost:8000. It needs no internet (no CDN, no web fonts), so the demo works without wifi.
+
+- **Owners:** `app/api.py` and its tests are Madhavan's; `web/` is Sriram's. The frontend only calls the API; it never reads CSV or NPZ files itself, and shows no number that did not come from the API.
+- **Modes** (`GET /api/status`): `real` (needs `results/summary.csv`, `results/run_info.json` with `synthetic: false`, `data/tiles_all.csv`, a real `results/calibration.json`), `placeholder` (uses `results/synthetic/` and `data/fake_tiles.csv`; every response says `synthetic: true` and the page shows the banner "SYNTHETIC PLACEHOLDER SCORES: NOT RESULTS"), or `unavailable`.
+- **Models:** `models/<name>_int8.tflite` if present, else `models/<name>_float.keras`; `GET /api/status` says which. A tile whose routed model is missing falls back to its stored score and the response says `score_source: "stored score"`.
+- **Endpoints:** `GET /api/status`, `/summary`, `/curves`, `/dial`, `/memory`, `/demo-case`, `/chips?split=&event=`, `/tiles?chip=`, `/tile/{tile_id}/image?kind=optical|radar|label&scale=`; `POST /api/triage {tile_id, alpha}`, `/api/triage/upload` (multipart .npz with `optical` 128x128x4 and/or `radar` 128x128x2, uint8, plus `cloud_frac` and `alpha`), `/api/simulate {split, event, chip, alpha, scaled_fraction, policies}`. `alpha` is one of 0.01, 0.05, 0.1.
+- **Scheduler and alert packet:** the API runs `src/scheduler/sim.py` for `/api/simulate` and builds the 32-byte alert with its `build_l0_alert_packet`; it has no packet or scheduling logic of its own.
+- **Pixels** come from `data/processed/<event>.npz` and the raw labels (both git-ignored). Without them the site still runs and shows "pixels not built".
 
 ## Repo rules
 

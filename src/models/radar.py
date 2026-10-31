@@ -5,7 +5,7 @@ Branch: harish/radar-compress
 
 Satellite Sensor & Polarization Technology:
 - Sensor: Sentinel-1 C-band Synthetic Aperture Radar (SAR)
-- Dataset: Sen1Floods11 — S1Hand (Flood event hand-labeled SAR)
+- Dataset: Sen1Floods11 â€” S1Hand (Flood event hand-labeled SAR)
 - Active Project Scopes: Flood Detection and Forest-Fire SAR observations.
 - Excluded Datasets: Cyclone datasets are permanently excluded from active scope.
 - Polarimetric Radar Bands:
@@ -176,12 +176,12 @@ def test_radar_model_independent(batch_size: int = 4) -> Dict[str, any]:
     total_params = model.count_params()
     trainable_params = sum(np.prod(v.shape) for v in model.trainable_weights)
 
-    print(f"✓ Model initialized successfully.")
-    print(f"✓ Input shape verified: (N, 128, 128, 2).")
-    print(f"✓ Dual heads verified: p_flood {p_pred.shape}, extent {ext_pred.shape}.")
-    print(f"✓ Prediction ranges verified: [0, 1].")
-    print(f"✓ Model save and reload verified.")
-    print(f"✓ Parameter count: {total_params:,} total, {trainable_params:,} trainable.")
+    print(f"âœ“ Model initialized successfully.")
+    print(f"âœ“ Input shape verified: (N, 128, 128, 2).")
+    print(f"âœ“ Dual heads verified: p_flood {p_pred.shape}, extent {ext_pred.shape}.")
+    print(f"âœ“ Prediction ranges verified: [0, 1].")
+    print(f"âœ“ Model save and reload verified.")
+    print(f"âœ“ Parameter count: {total_params:,} total, {trainable_params:,} trainable.")
 
     return {
         "status": "PASSED",
@@ -389,7 +389,7 @@ def train_radar_pipeline(
             "extent": np.clip(ext_preds.flatten(), 0.0, 1.0),
         }
     )
-    scores_path = RESULTS_DIR / "scores_radar.csv"
+    scores_path = RESULTS_DIR / "scores_radar_float.csv"
     scores_df.to_csv(scores_path, index=False)
 
     return {

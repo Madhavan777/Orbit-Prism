@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORBIT-PRISM // AETHER-IX Orbital Intelligence</title>
+<meta name="description" content="A TinyML triage layer that decides what a satellite sends first. You set the miss rate; we minimise the bytes, even through cloud.">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Persistent 3D WebGL Background Canvas -->
+<div id="mount3d"></div>
+
+<!-- Space Scanlines & Vignette Grid Overlay -->
+<div id="spaceVignette"></div>
+
+<!-- Top Continuous Scroll Progress Ribbon -->
+<div id="scrollRibbon"></div>
+
+<!-- Synthetic Warning Banner -->
+<div id="banner" role="status"><span id="bannertxt"></span></div>
+
+<!-- Top Navigation Bar -->
+<nav aria-label="Sections">
+  <div class="wrap">
+    <div class="nav-left">
+      <a class="brand" href="#top">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c6ff00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px #c6ff00);"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>
+        <span class="orb" aria-hidden="true"></span>
+        ORBIT<span>-PRISM</span>
+        <span class="badge-tag">EO-SAR-IND</span>
+      </a>
+      <div class="nav-links">
+        <a class="link" href="#problem"><span class="num">01</span>THE PROBLEM</a>
+        <a class="link" href="#how"><span class="num">02</span>HOW IT WORKS</a>
+        <a class="link" href="#try"><span class="num">03</span>TRY IT</a>
+        <a class="link" href="#link"><span class="num">04</span>LINK SIM</a>
+        <a class="link" href="#results"><span class="num">05</span>RESULTS</a>
+        <a class="link" href="#questions"><span class="num">06</span>JUDGES Q&amp;A</a>
+        <a class="link" href="#glossary"><span class="num">07</span>GLOSSARY</a>
+        <a class="link" href="#limits"><span class="num">08</span>LIMITS</a>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <button id="drag3dBtn" class="hud-btn" onclick="window.toggle3DDragMode()" title="Toggle 3D interactive drag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        3D DRAG MODE
+      </button>
+      <button class="hud-btn" onclick="window.replayIntro()" title="Replay 5-Step Opening Sequence">
+        &#8634; REPLAY INTRO
+      </button>
+      <span class="pill" id="pill">CONNECTING...</span>
+    </div>
+  </div>
+</nav>
+
+<!-- Right-Edge Vertical Mission Progress Rail (Desktop) -->
+<aside class="mission-rail" aria-label="Mission Progress">
+  <div class="rail-dot active" title="01 - The Problem" onclick="document.getElementById('problem').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="02 - How It Works" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="03 - Try It" onclick="document.getElementById('try').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="04 - Link Simulator" onclick="document.getElementById('link').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="05 - Results" onclick="document.getElementById('results').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="06 - Questions Judges Ask" onclick="document.getElementById('questions').scrollIntoView({behavior:'smooth'})"></div>
+  <div class="rail-dot" title="07 - Glossary & Limits" onclick="document.getElementById('glossary').scrollIntoView({behavior:'smooth'})"></div>
+</aside>
+
+<!-- Floating Bottom Telemetry HUD Bar -->
+<div class="bottom-hud">
+  <div class="hud-pill">
+    <span class="active-dot"></span>
+    <span>ORBIT LINK: <strong>ACTIVE</strong></span>
+    <span style="color:var(--line);">|</span>
+    <span>STAGE: <strong id="hudStage" style="color:var(--lav2);">01 HERO</strong></span>
+    <div id="introBanner" style="display:inline-flex; align-items:center; gap:8px; margin-left:8px; border-left:1px solid var(--line); padding-left:10px;">
+      <span id="introStepText" style="color:var(--lemon); font-weight:700;">INTRO 01: SATELLITE REVEAL (0%)</span>
+      <button onclick="window.skipIntro()" style="background:transparent; border:none; color:var(--muted); font-size:10px; cursor:pointer; font-family:var(--mono);">SKIP &#9654;</button>
+    </div>
+  </div>
+  <div class="hud-pill">
+    <span>LAT: <strong id="hudLat">20.5937° N</strong></span>
+    <span>LON: <strong id="hudLon">78.9629° E</strong></span>
+    <span>ALT: <strong id="hudAlt" style="color:var(--lemon);">408.00 KM</strong></span>
+  </div>
+</div>
+
+<div class="content-layer">
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-tagline">
+          <span class="active-dot" style="width:6px;height:6px;border-radius:50%;background:var(--lemon);display:inline-block;box-shadow:0 0 8px var(--lemon);"></span>
+          SATELLITE ONLINE · WHITE OPTICAL LASER LOCK: INDIA · PS 1.4
+        </div>
+        <h1>A TinyML triage layer that decides what a satellite sends first.</h1>
+        <p class="tag">You set the miss rate. We minimise the bytes, even through cloud.</p>
+        <div class="cta">
+          <a class="btn primary-btn" href="#try">LAUNCH 4×4 FLOOD SIM</a>
+          <a class="btn ghost" href="#results">SEE THE RESULTS</a>
+          <a class="btn ghost" href="#how">EXPLORE THE PIPELINE</a>
+        </div>
+      </div>
+
+      <div class="telemetry-card">
+        <div class="telemetry-header">
+          <span>ORBITAL TELEMETRY</span>
+          <span class="telemetry-highlight">NATIVE NADIR LOCK</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">SUB-SATELLITE AOI</span>
+          <span class="telemetry-val">EASTERN INDIA DELTA</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">COORDINATES</span>
+          <span class="telemetry-highlight">20.5937° N, 78.9629° E</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">ALTITUDE</span>
+          <span class="telemetry-val">408 KM (LEO SUN-SYNC)</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">DOWNLINK RATE</span>
+          <span class="telemetry-highlight" id="hudRate">44.2 Gbps COHERENT OPTICAL</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">TRIAGE CORE CEILING</span>
+          <span class="telemetry-highlight">4.2 MB ONBOARD SRAM</span>
+        </div>
+        <canvas id="orbitalCanvas" width="360" height="120" aria-label="Orbital tracking visualization"></canvas>
+      </div>
+    </div>
+
+    <!-- 4 live stats from /api/status -->
+    <div class="stats" id="stats"></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="problem">
+  <div class="label">01 · The bottleneck in numbers</div>
+  <h2>Each pass carries 19.2 MB, so the satellite must choose.</h2>
+  <p class="lead">A 256 kbit/s link open for ten minutes moves 19.2 MB, and one gigabyte would need about 52 passes. Meanwhile, conventional Earth observation satellites waste link bandwidth transmitting cloud-obscured or non-critical frames while urgent disaster perimeters wait in flash memory. We read this as a choice problem, not only a compression problem: decide what goes first, and state honestly how many critical tiles might be missed.</p>
+
+  <div class="problem-grid">
+    <div class="problem-card">
+      <div class="num">19.2 MB</div>
+      <h3>Pass transmission budget</h3>
+      <p>Total data a LEO satellite can downlink across a 10-minute ground station window at 256 kbit/s.</p>
+    </div>
+    <div class="problem-card">
+      <div class="num">52 Passes</div>
+      <h3>Per gigabyte needed</h3>
+      <p>Without on-device triage, transmitting an uncompressed sensor swath takes days across multiple orbital passes.</p>
+    </div>
+    <div class="problem-card">
+      <div class="num">4.2 MB</div>
+      <h3>Onboard SRAM ceiling</h3>
+      <p>Strict physical memory limit. Entire chips (6.8 MB) cannot fit; inference must run tile-by-tile in INT8.</p>
+    </div>
+    <div class="problem-card">
+      <div class="num">4.8×</div>
+      <h3>Faster critical alert</h3>
+      <p>Priority L0/L2 scheduling transmits validated flood perimeters to emergency operators in under 90 seconds.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="label">02 · The 10-step visual pipeline</div>
+  <h2>How it works: onboard triage streaming into ground receipt.</h2>
+  <p class="lead">From streaming raw bytes out of flash memory through cloud checking, dual-sensor model routing, conformal risk calibration, and layered packet downlink. <b>Steps 1–9 execute entirely inside the 4.2 MB satellite memory ceiling; Step 10 is the ground station.</b></p>
+  <div class="small muted" style="margin-top:10px;">Select any tile in the <b>Try it</b> section below to see steps 3, 4, 6 and 9 light up in real time with the actual values returned by the API.</div>
+  <ol class="steps" id="steps"></ol>
+</section>
+
+<section id="try">
+  <div class="label">03 · Selected solution & interactive triage</div>
+  <h2>Try it: one real tile through the real models.</h2>
+  <p class="lead">Pick a flood tile from the held-out event. The page runs the actual models on its pixels, routes it by cloud cover, applies the miss-rate dial and builds the 32-byte alert. Clouds are simulated; the flood labels are real Sen1Floods11 hand labels.</p>
+
+  <div class="controls-bar">
+    <div class="field">
+      <span>Miss-rate dial (example settings)</span>
+      <div class="seg" id="dial" role="group" aria-label="Target miss rate"></div>
+    </div>
+    <div class="field">
+      <span>Split</span>
+      <select id="split">
+        <option value="holdout">holdout (Bolivia)</option>
+        <option value="test">test</option>
+        <option value="valid">valid</option>
+        <option value="train">train</option>
+      </select>
+    </div>
+    <div class="field">
+      <span>Chip</span>
+      <select id="chip"></select>
+    </div>
+  </div>
+
+  <div id="dialnote" class="small muted" style="margin:8px 0 16px;" hidden></div>
+
+  <div class="try-layout">
+    <div class="grid-panel">
+      <div id="grid-counts"></div>
+      <div id="grid" role="grid" aria-label="4x4 flood tile grid"></div>
+    </div>
+
+    <div id="detail">
+      <div class="muted small">Select a tile above to view model scores, sensor routing, and the 32-byte downlink alert packet.</div>
+    </div>
+  </div>
+
+  <!-- Upload box for custom testing -->
+  <div class="controls-bar" style="margin-top:24px; flex-direction:column; align-items:flex-start;">
+    <div class="label" style="margin:0 0 8px;">Upload a tile to triage</div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; width:100%; align-items:center;">
+      <input type="file" id="upfile" accept=".png,.tif,.tiff">
+      <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
+        <span>Simulated cloud fraction:</span>
+        <input type="range" id="upcloud" min="0" max="1" step="0.05" value="0.2">
+        <span id="upcloudv" style="color:var(--lemon); font-weight:700;">20%</span>
+      </div>
+      <button class="btn ghost" id="upgo">Run Triage</button>
+    </div>
+    <div id="upout" style="width:100%; margin-top:10px;"></div>
+  </div>
+</section>
+
+<section id="link">
+  <div class="label">04 · Link Simulator</div>
+  <h2>Simulate pass downlink under a scaled budget.</h2>
+  <p class="lead">Simulate transmitting prioritized tiles across a 3.03 MB scaled pass. Critical alert packets (L2) and previews (L1) are prioritized ahead of full archival payload bytes (L0).</p>
+
+  <div class="sim-controls">
+    <div class="field" style="flex-direction:row; align-items:center; gap:10px;">
+      <span>Evaluation Scope:</span>
+      <select id="scope">
+        <option value="holdout">Held-out Event (Bolivia)</option>
+        <option value="all">Full Test Set</option>
+      </select>
+    </div>
+    <button class="btn" id="simgo">Run Pass Simulation</button>
+    <button class="btn ghost" id="playQueueBtn" style="display:none;">Play Downlink Animation</button>
+    <span id="playStatus" class="small muted" style="margin-left:8px;"></span>
+  </div>
+
+  <div id="budgetProgress" style="display:none;">
+    <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.78rem;">
+      <span>Scaled Pass Budget: <strong id="budgetVal">0.00 / 3.03 MB</strong></span>
+      <span id="budgetPct" style="color:var(--lemon); font-weight:700;">0%</span>
+    </div>
+    <div class="progress-bar-track">
+      <div id="budgetFill"></div>
+    </div>
+  </div>
+
+  <div id="simout"></div>
+</section>
+
+<section id="results">
+  <div class="label">05 · Experimental Benchmark</div>
+  <h2>Quantitative evaluation across held-out events.</h2>
+  <p class="lead" id="resnote">Loading evaluation results...</p>
+
+  <div class="table-wrap">
+    <div id="chart" style="padding:20px; text-align:center;"></div>
+  </div>
+
+  <h3>5-System Comparative Summary</h3>
+  <div class="table-wrap">
+    <table id="summary">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Sensor Used</th>
+          <th>Recall on Critical</th>
+          <th>Downlink Data (MB)</th>
+          <th>Alert Time (s)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>Dial Sensitivity Table</h3>
+  <div class="table-wrap">
+    <table id="dialtable">
+      <thead>
+        <tr>
+          <th>Target Miss Rate</th>
+          <th>Optical Threshold</th>
+          <th>Radar Threshold</th>
+          <th>Tiles Kept</th>
+          <th>Empirical Miss Rate</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>INT8 Onboard Memory Allocation</h3>
+  <div class="table-wrap">
+    <table id="memory">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Weight Footprint (KB)</th>
+          <th>Peak Activation (KB)</th>
+          <th>Total Memory (KB)</th>
+          <th>Status (vs 4.2 MB SRAM)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>Held-out Demo Case</h3>
+  <div id="democase" class="problem-card" style="margin-top:16px;"></div>
+</section>
+
+<section id="questions">
+  <div class="label">06 · Defense & Architecture</div>
+  <h2>Questions judges ask.</h2>
+  <p class="lead">Direct, unvarnished engineering answers to common evaluation questions.</p>
+
+  <div class="accordion">
+    <details>
+      <summary>Is this just cloud detection?</summary>
+      <div class="ans">No. Cloud detection is simply an initial gating sensor input. The core contribution is the combination of calibrated miss-rate control, automated radar fallback when optical bands are obscured, and a byte-budget pass scheduler measured together as a complete edge system.</div>
+    </details>
+
+    <details>
+      <summary>Why tiles, not pixels?</summary>
+      <div class="ans">A full satellite image chip (6.8 MB uncompressed) exceeds the physical 4.2 MB SRAM limit of candidate spaceborne microcontrollers. Tiling into 128×128 sub-blocks allows tile-by-tile streaming inference within memory bounds, which is sufficient to determine transmission priority.</div>
+    </details>
+
+    <details>
+      <summary>Why a small CNN over a water index?</summary>
+      <div class="ans">A colour-index baseline (such as NDWI / MNDWI) is one of our primary benchmark comparisons. If the small CNN does not demonstrate a measurable recall advantage over the simple index on held-out test data, we state that explicitly in the results table.</div>
+    </details>
+
+    <details>
+      <summary>How does it fit in 4.2 MB?</summary>
+      <div class="ans">Tiles are processed sequentially one at a time. Model weights are quantized to INT8, and peak activation memory is derived directly from the neural network execution graph (see the onboard memory table).</div>
+    </details>
+
+    <details>
+      <summary>What if radar is wrong?</summary>
+      <div class="ans">Synthetic Aperture Radar (SAR) can generate false alarms over smooth terrain, flat runways, or specular reflectors. Uncertain tiles are scheduled as lower-priority preview packets rather than discarded, and false alarm rates are tracked and reported in the metrics.</div>
+    </details>
+
+    <details>
+      <summary>What if the cloud check is wrong?</summary>
+      <div class="ans">If thin cirrus clouds are misclassified as clear sky, optical false dismissals could occur; conversely, overestimating clouds incurs the cost of activating the radar pipeline. We measure and report cloud triage error rates separately from segmentation error.</div>
+    </details>
+
+    <details>
+      <summary>Does the promise hold under data shift?</summary>
+      <div class="ans">The calibrated miss rate holds when test data resembles calibration data. When encountering novel terrain, severe atmospheric disturbance, or unseen geographies, performance can degrade. We report the empirical miss rate observed on completely held-out flood events.</div>
+    </details>
+
+    <details>
+      <summary>Do optical and radar come from one satellite?</summary>
+      <div class="ans">No. In this benchmark, optical imagery comes from Sentinel-2 and radar imagery comes from Sentinel-1. The co-registered paired payload is simulated to evaluate future dual-payload or collaborative orbital constellations.</div>
+    </details>
+
+    <details>
+      <summary>Is this real hardware?</summary>
+      <div class="ans">No. This is an engineering simulation using measured model footprints, verified INT8 quantization parameters, and estimated peak SRAM activations benchmarked against target space-qualified processor specs.</div>
+    </details>
+
+    <details>
+      <summary>Why only floods?</summary>
+      <div class="ans">Floods represent our completed worked example with verified ground truth from the Sen1Floods11 dataset. Wildfire and burn-scar pipelines are architecturally planned but have not yet been ingested into the evaluation pipeline.</div>
+    </details>
+  </div>
+</section>
+
+<section id="glossary">
+  <div class="label">07 · Technical Definitions & Limits</div>
+  <h2>Glossary</h2>
+  <p class="lead">Formal definitions of mission and algorithmic terminology.</p>
+
+  <div class="glossary-grid">
+    <div class="glossary-card">
+      <h4>Tile</h4>
+      <p>A 128×128 sub-region of a satellite image chip processed as an individual unit through the onboard inference pipeline.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Chip</h4>
+      <p>A 512×512 pixel satellite scene covering approximately 26 square kilometers on the ground, composed of a 4×4 grid of 16 tiles.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Critical Tile</h4>
+      <p>A tile containing validated flood inundation across at least 30% of its surface area according to hand-labelled ground truth.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Miss-Rate Dial</h4>
+      <p>A configurable parameter (1%, 5%, 10%) determining the operational decision threshold calculated via conformal risk calibration.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Scaled Pass</h4>
+      <p>A 3.03 MB transmission budget representing 20% of the event data, used for benchmarking pass scheduling under link constraints.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>L0 / L1 / L2</h4>
+      <p>L2 represents immediate 32-byte alert packets; L1 represents compressed preview thumbnails; L0 represents full uncompressed raw pixel data.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Priority Score</h4>
+      <p>A composite metric combining flood severity probability, critical flag, and sensor confidence used to sequence downlink queueing.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Held-Out Event</h4>
+      <p>A completely unseen geographic flood disaster (e.g. Bolivia) withheld during calibration to evaluate performance under real-world domain shifts.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>Simulated Cloud</h4>
+      <p>Synthetic cloud masks blended over optical imagery to systematically evaluate the automated routing switch to radar.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>SRAM</h4>
+      <p>Static Random-Access Memory on the satellite microcontroller, constrained to 4.2 MB physical capacity.</p>
+    </div>
+    <div class="glossary-card">
+      <h4>INT8</h4>
+      <p>8-bit integer quantization used to compress deep neural network weights and activations for edge execution.</p>
+    </div>
+  </div>
+
+  <div id="limits" class="limits-card">
+    <h3>Honest Limits & Operational Scope</h3>
+    <ul>
+      <li>Calibrated miss rates hold when test data resembles calibration data; unseen geographic biomes may experience distribution shift.</li>
+      <li>Paired optical (Sentinel-2) and radar (Sentinel-1) swaths are simulated from co-registered public datasets, not an integrated single-satellite sensor.</li>
+      <li>Cloud detection errors directly influence sensor routing: undetected clouds degrade optical inference, while overdetected clouds trigger unnecessary radar processing.</li>
+      <li>Memory footprints and execution timings are based on INT8 graph analysis and simulation on representative hardware, not on-orbit flight qualification.</li>
+      <li>Currently validated solely on riverine flood disaster scenarios; forest fire and burn-scar datasets are not yet loaded.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <strong>ORBIT-PRISM // AETHER-IX</strong> · TinyML Orbital Triage System · Conscientia 2k26
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span class="muted">Zero external CDN · Self-contained static assets · 100% offline capable</span>
+      <a href="#top" class="hud-btn" style="text-decoration:none;">&uarr; BACK TO TOP</a>
+    </div>
+  </div>
+</footer>
+
+</div><!-- end content-layer -->
+
+<!-- Scripts (offline vendor libraries first, then engine, then application logic) -->
+<script src="js/vendor/three.min.js"></script>
+<script src="js/vendor/gsap.min.js"></script>
+<script src="js/vendor/ScrollTrigger.min.js"></script>
+<script src="js/three-scene.js"></script>
+<script src="js/api.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var mount = document.getElementById('mount3d');
+    if (mount && window.initOrbital3D) {
+      window.initOrbital3D(mount);
+    }
+  });
+</script>
+</body>
+</html>

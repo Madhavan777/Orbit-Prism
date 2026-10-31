@@ -175,6 +175,33 @@ def test_thresholds_are_in_raw_score_units_and_json_records_provenance():
     assert all(b >= a for a, b in zip(knots["y"], knots["y"][1:]))  # monotone
 
 
+def test_calibration_loads_the_team_score_format(tmp_path):
+    """Score files are tile_id,p_flood,extent (tile_id = <chip>_<row>_<col>); calibration must accept them."""
+    from pathlib import Path
+    from src.calibration.calibrate import load_dataset_for_calibration
+
+    base = pd.DataFrame({
+        "event": "Ghana", "chip": [f"Ghana_{i}" for i in range(6)], "row": 0, "col": 2, "split": "valid",
+        "water_frac": 0.4, "critical": 1, "cloud_frac": [0.1, 0.9] * 3, "sensor_used": ["optical", "radar"] * 3})
+    base.to_csv(tmp_path / "base.csv", index=False)
+    tid = [f"{c}_{r}_{k}" for c, r, k in zip(base.chip, base.row, base.col)]
+    pd.DataFrame({"tile_id": tid, "p_flood": 0.2, "extent": 0.3}).to_csv(tmp_path / "o.csv", index=False)
+    pd.DataFrame({"tile_id": tid, "p_flood": 0.8, "extent": 0.9}).to_csv(tmp_path / "r.csv", index=False)
+
+    df, source = load_dataset_for_calibration(
+        tiles_base_path=tmp_path / "base.csv", optical_scores_path=tmp_path / "o.csv",
+        radar_scores_path=tmp_path / "r.csv", fallback_fake_path=tmp_path / "none.csv")
+    assert source.startswith("real_model_predictions")
+    assert df.loc[df.sensor_used == "optical", "p_flood"].eq(0.2).all()   # each tile gets its own path's score
+    assert df.loc[df.sensor_used == "radar", "p_flood"].eq(0.8).all()
+
+    pd.read_csv(tmp_path / "r.csv").iloc[:-1].to_csv(tmp_path / "r.csv", index=False)   # drop one tile
+    with pytest.raises(SystemExit, match="no score"):
+        load_dataset_for_calibration(
+            tiles_base_path=tmp_path / "base.csv", optical_scores_path=tmp_path / "o.csv",
+            radar_scores_path=tmp_path / "r.csv", fallback_fake_path=tmp_path / "none.csv")
+
+
 def test_cli_refuses_placeholder_scores_without_flag(monkeypatch, tmp_path):
     """Calibrating on synthetic placeholders must be an explicit choice."""
     import sys

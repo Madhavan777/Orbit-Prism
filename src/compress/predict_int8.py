@@ -52,8 +52,10 @@ class Int8ModelRunner:
         self.inp_detail = self.input_details[0]
         self.inp_index = self.inp_detail["index"]
         self.inp_shape = self.inp_detail["shape"]
-        self.inp_scale = float(self.inp_detail["quantization_parameters"]["scales"][0])
-        self.inp_zero_point = int(self.inp_detail["quantization_parameters"]["zero_points"][0])
+        # A raw uint8 input (the optical model) carries no quantisation parameters.
+        in_q = self.inp_detail["quantization_parameters"]
+        self.inp_scale = float(in_q["scales"][0]) if len(in_q["scales"]) > 0 else 1.0
+        self.inp_zero_point = int(in_q["zero_points"][0]) if len(in_q["zero_points"]) > 0 else 0
 
         # Parse output quantization parameters for each head
         self.outputs = []

@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TILES_BASE = ROOT / "data" / "tiles_base.csv"
 SCORES_OPTICAL = ROOT / "results" / "scores_optical_int8.csv"
 SCORES_RADAR = ROOT / "results" / "scores_radar_int8.csv"
+SCORES_NDWI = ROOT / "results" / "scores_ndwi.csv"
 FAKE_TILES = ROOT / "data" / "fake_tiles.csv"
 OUT_TILES = ROOT / "data" / "tiles.csv"
 OUT_PLACEHOLDER = ROOT / "data" / "tiles_placeholder.csv"
@@ -78,10 +79,22 @@ def merge_scores(
             raise SystemExit(f"{n_missing} tiles have no score for their sensor path; "
                              f"the score files must cover every tile in tiles_base.csv")
         result, target = merged[COLUMNS], out_path
+        # tiles_all.csv: the same tiles plus every model's score on EVERY tile (not only on the
+        # tiles routed to it), which the baselines and ablations in scripts/evaluate.py need.
+        extra = merged[COLUMNS].copy()
+        extra["p_optical"], extra["extent_optical"] = merged["p_opt"], merged["e_opt"]
+        extra["p_radar"], extra["extent_radar"] = merged["p_rad"], merged["e_rad"]
+        if SCORES_NDWI.exists():
+            nd = _score_table(SCORES_NDWI).rename(columns={"p_flood": "p_ndwi"})[KEY + ["p_ndwi"]]
+            extra = extra.merge(nd, on=KEY, how="left")
+            if extra["p_ndwi"].isna().any():
+                raise SystemExit("scores_ndwi.csv does not cover every tile")
     elif allow_placeholder:
+        extra = None
         logger.warning("PLACEHOLDER: real scores not found; using SYNTHETIC scores from %s. "
                        "Writing %s, not %s.", fake_tiles_path.name, OUT_PLACEHOLDER.name, out_path.name)
         fake = pd.read_csv(fake_tiles_path)[KEY + ["p_flood", "extent"]]
+        extra = None
         result = base.merge(fake, on=KEY, how="left")[COLUMNS]
         target = OUT_PLACEHOLDER
     else:
@@ -94,6 +107,10 @@ def merge_scores(
     target.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(target, index=False, lineterminator="\n")
     logger.info("Wrote %s with %d rows and %d columns", target, len(result), len(result.columns))
+    if extra is not None:
+        all_path = target.with_name("tiles_all.csv")
+        extra.to_csv(all_path, index=False, lineterminator="\n")
+        logger.info("Wrote %s with %d columns", all_path, len(extra.columns))
     return result
 
 

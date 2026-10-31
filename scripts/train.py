@@ -27,6 +27,7 @@ from sklearn.utils.class_weight import compute_class_weight
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.constants import INTERNAL_VAL_EVENTS
 from src.models.optical import (
     build_optical_model,
     compile_optical_model,
@@ -50,6 +51,7 @@ def parse_args():
     parser.add_argument("--cloud_threshold", type=float, default=0.50, help="Maximum cloud fraction allowed in TRAIN")
     parser.add_argument("--output_model", type=str, default="models/optical_float.keras", help="Model checkpoint path")
     parser.add_argument("--critical_flood_threshold", type=float, default=0.30, help="Water fraction for critical flood")
+    parser.add_argument("--seed", type=int, default=42, help="Fixed random seed for reproducibility")
     parser.add_argument("--dry_run", action="store_true", help="Run 1 epoch test with synthetic data if NPZ not ready")
     return parser.parse_args()
 
@@ -129,7 +131,9 @@ def train():
     print("ORBIT-PRISM: Optical Flood CNN Training Pipeline (Shenbaga)")
     print("=" * 70)
 
-    # 1. Hardware Initialization
+    # 1. Hardware & Seed Initialization
+    keras.utils.set_random_seed(args.seed)
+    print(f"Fixed Random Seed set to: {args.seed}")
     setup_gpu()
 
     data_dir = Path(args.data_dir)
@@ -159,9 +163,15 @@ def train():
 
         # Split masks use the CONTEXT.md names: train / valid / test / holdout.
         # The held-out event (holdout) must never reach training or calibration.
-        train_mask = np.isin(splits_str, list(TRAIN_SPLITS)) & (cloud_frac < args.cloud_threshold)
+        # Early stopping uses whole events held back from `train` (INTERNAL_VAL_EVENTS), exactly like the
+        # radar model, so the calibration split (`valid`) is not used for model selection.
+        in_train = np.isin(splits_str, list(TRAIN_SPLITS)) & (cloud_frac < args.cloud_threshold)
+        internal = np.isin(np.asarray(ds.event).astype(str), list(INTERNAL_VAL_EVENTS))
+        train_mask = in_train & ~internal
+        es_mask = in_train & internal
         cal_mask = np.isin(splits_str, list(CAL_SPLITS))
-        assert not np.isin(splits_str[train_mask | cal_mask], ["holdout"]).any(), "holdout leaked into train/cal"
+        assert not np.isin(splits_str[train_mask | es_mask | cal_mask], ["holdout"]).any(), \
+            "holdout leaked into train/early-stopping/cal"
         if train_mask.sum() == 0:
             raise SystemExit(f"No training tiles found; split values present: {sorted(set(splits_str))}")
         if cal_mask.sum() == 0:
@@ -170,7 +180,14 @@ def train():
 
         x_train, y_train_p, y_train_e = images[train_mask], p_flood[train_mask], extent[train_mask]
         x_cal, y_cal_p, y_cal_e = images[cal_mask], p_flood[cal_mask], extent[cal_mask]
-        print(f"TRAIN Set (cloud_frac < {args.cloud_threshold}): {len(x_train)} samples")
+        if es_mask.sum() > 0:
+            x_es, y_es_p, y_es_e = images[es_mask], p_flood[es_mask], extent[es_mask]
+        else:
+            print(f"[WARNING] none of {INTERNAL_VAL_EVENTS} are in the data: early stopping falls back to the "
+                  "calibration split, which biases the miss-rate dial. Do not use this for final results.")
+            x_es, y_es_p, y_es_e = x_cal, y_cal_p, y_cal_e
+        print(f"TRAIN Set (cloud_frac < {args.cloud_threshold}): {len(x_train)} samples ({int(y_train_p.sum())} critical)")
+        print(f"EARLY-STOPPING Set (events {INTERNAL_VAL_EVENTS}, train split): {len(x_es)} samples ({int(y_es_p.sum())} critical)")
         print(f"CAL/VAL Set: {len(x_cal)} samples")
         print(f"HOLDOUT tiles present and untouched: {int((splits_str == 'holdout').sum())}")
 
@@ -186,6 +203,7 @@ def train():
         split_idx = int(0.75 * n_samples)
         x_train, y_train_p, y_train_e = images[:split_idx], p_flood[:split_idx], extent[:split_idx]
         x_cal, y_cal_p, y_cal_e = images[split_idx:], p_flood[split_idx:], extent[split_idx:]
+        x_es, y_es_p, y_es_e = x_cal, y_cal_p, y_cal_e
         args.epochs = 2
 
     # 3. Class Imbalance Weighting
@@ -236,7 +254,7 @@ def train():
 
     # 6. Training Execution
     train_gen = DataGenerator(x_train, y_train_p, y_train_e, batch_size=args.batch_size, augment=True)
-    val_data = (x_cal, {"p_flood": y_cal_p, "extent": y_cal_e})
+    val_data = (x_es, {"p_flood": y_es_p, "extent": y_es_e})   # early stopping / checkpointing set
 
     print(f"\nStarting training for up to {args.epochs} epochs (Batch size: {args.batch_size})...")
     history = model.fit(

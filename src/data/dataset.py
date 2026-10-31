@@ -48,6 +48,7 @@ def process_event_chips(
     chip_splits: Optional[Dict[str, str]] = None,
     drop_over_50_nodata: bool = False,
     target_cloud_lookup: Optional[Dict[str, float]] = None,
+    opaque_clouds: bool = True,
 ) -> Tuple[Path, List[Dict[str, Union[str, int, float]]], Dict[str, int]]:
     """Process all chips for a single flood event into a compressed NPZ file and metadata records.
 
@@ -112,7 +113,7 @@ def process_event_chips(
         radar_chip = preprocess_radar_chip(s1_raw)
 
         # Synthetic cloud simulation on OPTICAL ONLY
-        optical_cloudy, alpha_mask, cloud_stats = generate_chip_clouds(chip_id, optical_clean)
+        optical_cloudy, alpha_mask, cloud_stats = generate_chip_clouds(chip_id, optical_clean, opaque=opaque_clouds)
 
         # Preprocess labels
         label_stats = preprocess_labels_and_stats(
@@ -130,7 +131,12 @@ def process_event_chips(
         opt_dict = {generate_tile_id(chip_id, r, c): arr for r, c, arr in opt_tiles}
         rad_dict = {generate_tile_id(chip_id, r, c): arr for r, c, arr in rad_tiles}
 
-        split_name = chip_splits.get(chip_id, "holdout" if event_name == "Bolivia" else "train") if chip_splits else "holdout"
+        # A chip without a known split must be an error. (The old default labelled every tile
+        # "holdout" when chip_splits was omitted, which would have silently emptied the training set.)
+        if not chip_splits or chip_id not in chip_splits:
+            raise ValueError(f"No split known for chip {chip_id}; pass chip_splits "
+                             "(src.data.split_events.load_official_chip_splits) or use scripts/build_processed.py")
+        split_name = chip_splits[chip_id]
 
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):

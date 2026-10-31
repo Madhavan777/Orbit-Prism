@@ -313,6 +313,28 @@ def test_radar_metadata_schema(tmp_path):
     assert set(df.loc[df["split"] == "holdout", "event_id"]) == {"Bolivia"}
 
 
+def test_opaque_clouds_are_pure_white_and_leave_routing_unchanged():
+    from src.data.cloud_simulation import generate_chip_clouds, opaque_mask, simulate_chip_cloud_mask
+
+    rng = np.random.default_rng(0)
+    optical = rng.integers(0, 200, (512, 512, 4), dtype=np.uint8)           # no pixel is white to begin with
+    chip = "Zed_1"
+    soft = simulate_chip_cloud_mask(chip)
+    op_img, op_alpha, op_stats = generate_chip_clouds(chip, optical, opaque=True)
+    so_img, so_alpha, so_stats = generate_chip_clouds(chip, optical, opaque=False)
+
+    # the same tiles are cloudy, with the same fractions, so tiles_base.csv and routing do not change
+    assert op_stats == so_stats
+    assert set(np.unique(op_alpha)) <= {0.0, 1.0} and np.array_equal(op_alpha, opaque_mask(soft))
+    assert np.array_equal(so_alpha, soft)
+    # inside the mask the optical signal is gone; outside it the pixels are untouched
+    inside = op_alpha == 1.0
+    assert inside.any() and (op_img[inside] == 255).all()
+    assert np.array_equal(op_img[~inside], optical[~inside])
+    # the soft variant lets signal through inside the mask (pixels at alpha 0.5 keep half their reflectance)
+    assert (so_img[inside] < 255).any()
+
+
 def test_tiles_base_clouds_match_the_pixel_pipeline():
     """tiles_base.csv cloud_frac must equal what src.data.cloud_simulation gives the pixels."""
     import numpy as np
