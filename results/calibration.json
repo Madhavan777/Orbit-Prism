@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "calibration_split": "valid",
+  "method": "split_conformal",
+  "optical": {
+    "0.01": 0.015873,
+    "0.05": 0.015873,
+    "0.1": 0.024
+  },
+  "radar": {
+    "0.01": 0.013986,
+    "0.05": 0.013986,
+    "0.1": 0.054054
+  },
+  "target_alphas": [
+    "0.01",
+    "0.05",
+    "0.1"
+  ],
+  "critical_calibration_tiles": {
+    "optical": 54,
+    "radar": 64
+  },
+  "calibration_events": [
+    "Ghana",
+    "India",
+    "Mekong",
+    "Nigeria",
+    "Pakistan",
+    "Paraguay",
+    "Somalia",
+    "Spain",
+    "Sri-Lanka",
+    "USA"
+  ],
+  "score_direction": "higher_score_indicates_greater_flood_probability",
+  "threshold_convention": "k_th_smallest_critical_score (1-based k = floor((n+1)*alpha))",
+  "decision_rule": "keep_tile if p_flood >= threshold",
+  "probability_calibration_metrics": {
+    "optical": {
+      "ece": 0.0,
+      "brier": 0.047098,
+      "samples": 830
+    },
+    "radar": {
+      "ece": 0.0,
+      "brier": 0.061096,
+      "samples": 524
+    }
+  },
+  "conformal_diagnostics": {
+    "optical": {
+      "0.01": {
+        "threshold": 0.015873,
+        "k": 0,
+        "n": 54,
+        "status": "conservative_fallback",
+        "alpha": 0.01,
+        "min_required_n": 99,
+        "note": "Sample size n=54 < 99; using minimum critical score as conservative fallback."
+      },
+      "0.05": {
+        "threshold": 0.015873,
+        "k": 2,
+        "n": 54,
+        "status": "exact",
+        "alpha": 0.05,
+        "note": "k-th smallest score with 1-based k=2 (0-based index 1)."
+      },
+      "0.1": {
+        "threshold": 0.024,
+        "k": 5,
+        "n": 54,
+        "status": "exact",
+        "alpha": 0.1,
+        "note": "k-th smallest score with 1-based k=5 (0-based index 4)."
+      }
+    },
+    "radar": {
+      "0.01": {
+        "threshold": 0.013986,
+        "k": 0,
+        "n": 64,
+        "status": "conservative_fallback",
+        "alpha": 0.01,
+        "min_required_n": 99,
+        "note": "Sample size n=64 < 99; using minimum critical score as conservative fallback."
+      },
+      "0.05": {
+        "threshold": 0.013986,
+        "k": 3,
+        "n": 64,
+        "status": "exact",
+        "alpha": 0.05,
+        "note": "k-th smallest score with 1-based k=3 (0-based index 2)."
+      },
+      "0.1": {
+        "threshold": 0.054054,
+        "k": 6,
+        "n": 64,
+        "status": "exact",
+        "alpha": 0.1,
+        "note": "k-th smallest score with 1-based k=6 (0-based index 5)."
+      }
+    }
+  }
+}
