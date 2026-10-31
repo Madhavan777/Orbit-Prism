@@ -71,3 +71,64 @@
 - **Out-of-scope hazards**: no code or data for them exists in the repository (checked by `test_15` on code and data files).
 - **Numbers above**: weights and activations in section 4 are the radar-only figures from an untrained architecture. The combined, regenerated table is `results/memory_table.csv`.
 
+---
+
+## 6. Measured results
+
+### Training Run Details
+- **Random Seed**: Fixed at `42` (`np.random.seed(42)`, `tf.random.set_seed(42)`).
+- **Epochs Trained**: Configured for `40` epochs with early stopping (`patience=7` on validation loss). Best weights restored from epoch 25; training terminated at epoch 32.
+- **Wall-Clock Time**: ~3.5 minutes total (~6.5 seconds per epoch).
+- **Hardware Used**: Native Windows CPU (Intel Core i5, oneDNN AVX2 optimizations enabled; GPU disabled per TF >= 2.11 Windows limitation).
+
+### Valid-Split Metrics (Float Radar Model)
+Evaluated on the full `valid` split (1,354 tiles, 118 critical):
+- **AUROC**: `0.9426` (on routed tiles with `cloud_frac >= 0.5`: `0.9605`)
+- **Recall @ 0.90 Target Threshold**: `0.9068` (measured at threshold `p_flood >= 0.0623`; reaches `0.9407` at `0.0600`)
+- **Extent MAE**: `0.1271`
+
+### INT8 vs. Float Comparison (Valid Split)
+- **AUROC**:
+  - Float: `0.9426` (Routed: `0.9605`)
+  - INT8: `0.9281` (Routed: `0.9558`)
+  - Drop: `-0.0145` AUROC under full-integer quantization.
+- **Recall @ 0.5**:
+  - Float: `0.0000` (0 / 118 detected at fixed 0.5 threshold due to uncalibrated probability skew on rare-class floods)
+  - INT8: `0.0000` (Consistent across both models before calibration; calibrated operating threshold is ~0.06)
+- **Max Absolute Error**:
+  - `p_flood` max absolute error: `0.1441` (mean error: `0.0798`)
+  - `extent` max absolute error: `0.1486` (mean error: `0.0791`)
+- **Expected Calibration Error (ECE)**:
+  - Float: `0.0402` (Routed: `0.0362`)
+  - INT8: `0.1009` (Routed: `0.1071`)
+
+### Radar Memory Profile Summary
+From `results/memory_table.csv`:
+| Model | Dtype | Weights (B) | Peak Activation (B) | Tile Buffer (B) | Total SRAM (B) | MACs | Recall @ 0.5 | ECE | Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Radar** | FLOAT32 | 61,104 | 262,144 | 32,768 | 356,016 | 5,308,480 | 0.0000 | 0.0362 | `trained_model_file` |
+| **Radar** | INT8 | 15,552 | 65,536 | 32,768 | 113,856 | 5,308,480 | 0.0000 | 0.1071 | `trained_model_file` |
+
+- **Weight Compression**: 74.5% reduction (61,104 B $\to$ 15,552 B).
+- **Peak Activation Memory**: 75.0% reduction (262,144 B $\to$ 65,536 B).
+- **Total SRAM Requirement**: 113,856 B (~111.2 KiB), consuming only **2.71%** of the 4.2 MB SRAM ceiling.
+
+### Optical Rescaling Finding & Proposed Architecture Fix
+- **Observation**:
+  In `results/memory_table.csv`, the Optical INT8 model has a peak activation of `327,680 bytes` (only a ~16.7% drop from FP32's `393,216 bytes`). In comparison, Radar INT8 drops from `262,144 bytes` to `65,536 bytes` (a 75.0% reduction).
+- **Root Cause in `src/models/optical.py`**:
+  The optical model accepts `uint8` inputs and uses `layers.Rescaling(1.0 / 255.0, name="rescaling")(inputs)`. In TFLite, this `Rescaling` operator executes in `float32`, casting the entire input tile tensor `(128, 128, 4)` to 32-bit floats (`128 * 128 * 4 * 4 = 262,144 bytes`) and keeping it resident in the dynamic activation arena alongside layer activations.
+- **Proposed Fix**:
+  Normalize optical tiles to float `[0.0, 1.0]` (or int8 `[-128, 127]`) in the data loader before model entry, matching the radar pipeline design. Removing `layers.Rescaling` from the Keras graph allows TFLite converter to quantize the entire graph to 8-bit integers without float intermediate buffers, dropping Optical INT8 peak activation from `327,680 bytes` to `65,536 bytes`.
+
+### Strict Holdout Isolation Confirmation
+- **Holdout Event**: `Bolivia` (231 tiles total, 42 critical flood tiles).
+- **Audit**: Bolivia tiles were strictly excluded from:
+  1. Training batches
+  2. Early stopping validation splits
+  3. Calibration / threshold selection
+  4. Quantization calibration representative datasets
+  5. Validation metric reporting
+- Holdout tiles were purely scored and written to `results/scores_radar_float.csv`, `results/scores_radar_int8.csv`, `results/scores_optical_float.csv`, and `results/scores_optical_int8.csv` for downstream evaluation by Madhavan as dictated by competition rules.
+
+
