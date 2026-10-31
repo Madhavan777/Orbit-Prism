@@ -74,5 +74,27 @@ Scope is floods and forest fires (CONTEXT.md). These modules are experiments and
 
 * `scripts/train.py` and `scripts/predict.py` read **all** event files in `data/processed/` through `OrbitPrismDataset`, using the split names `train / valid / test / holdout`. Training uses `train` tiles with `cloud_frac < 0.5`; `valid` is the calibration set; `holdout` (Bolivia) is never read for training or calibration.
 * `scripts/predict.py` writes `results/scores_optical_float.csv` (`tile_id,p_flood,extent`, `tile_id = <chip>_<row>_<col>`). The contract file `results/scores_optical_int8.csv` comes from the INT8 model (`src/compress/predict_int8.py`).
-* Early stopping monitors the `valid` split, which is also the calibration split. That is a small optimistic bias for the miss-rate dial; a separate early-stopping slice would remove it.
-* The earlier dry-run scores and model file (made on random synthetic data) were removed from `results/` and `models/` so they cannot be mistaken for results.
+* Early stopping monitors the internal validation set (`Spain` and `Somalia` train split), keeping the `valid` calibration set completely independent.
+
+## 7. Measured results
+
+The optical model was trained on the processed Sen1Floods11 dataset using `scripts/train.py`:
+
+* **Random seed:** 42
+* **Hardware:** Native Windows CPU fallback (Intel x86_64, TensorFlow 2.21.0)
+* **Epochs run:** 13 epochs (early stopping triggered; best weights restored from epoch 8)
+* **Wall-clock training time:** ~25 seconds
+* **Set sizes:**
+  * TRAIN set (`cloud_frac < 0.5`, excluding Spain/Somalia): 1,984 tiles (135 critical)
+  * Early-stopping set (`Spain` and `Somalia` train tiles): 300 tiles (15 critical)
+  * CAL/VAL set (`valid` split): 1,354 tiles
+  * HOLDOUT set (`Bolivia` event): 231 tiles (untouched, scored only)
+* **Calibration split (valid) evaluation metrics:**
+  * **CAL AUROC:** 0.9507
+  * **CAL Recall (@ 0.5):** 0.4831
+  * **CAL Extent MAE:** 0.0797
+  * **Total parameters:** 15,682
+  * **FP32 weight size:** 61.26 KB (checkpoint file `models/optical_float.keras`: 260.90 KB)
+
+These numbers reflect simulated-cloud results from a single training run on the Sen1Floods11 dataset. They are not flight hardware performance measurements and are not compared against holdout metrics.
+
