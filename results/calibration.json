@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "calibration_split": "valid",
+  "method": "split_conformal",
+  "optical": {
+    "0.01": 0.0,
+    "0.05": 0.085938,
+    "0.1": 0.132812
+  },
+  "radar": {
+    "0.01": 0.0,
+    "0.05": 0.140625,
+    "0.1": 0.148438
+  },
+  "target_alphas": [
+    "0.01",
+    "0.05",
+    "0.1"
+  ],
+  "critical_calibration_tiles": {
+    "optical": 76,
+    "radar": 42
+  },
+  "calibration_events": [
+    "Ghana",
+    "India",
+    "Mekong",
+    "Nigeria",
+    "Pakistan",
+    "Paraguay",
+    "Somalia",
+    "Spain",
+    "Sri-Lanka",
+    "USA"
+  ],
+  "score_direction": "higher_score_indicates_greater_flood_probability",
+  "threshold_convention": "k_th_smallest_critical_score (1-based k = floor((n+1)*alpha))",
+  "decision_rule": "keep_tile if p_flood >= threshold",
+  "threshold_score_space": "raw_p_flood",
+  "score_source": "real_model_predictions (scores_optical_int8.csv + scores_radar_int8.csv)",
+  "probability_calibration_metrics_in_sample": {
+    "optical": {
+      "ece": 0.0,
+      "brier": 0.045796,
+      "samples": 776
+    },
+    "radar": {
+      "ece": 0.0,
+      "brier": 0.037551,
+      "samples": 578
+    }
+  },
+  "probability_calibration_metrics_note": "Computed on the same tiles the isotonic map was fitted on, so ECE is optimistic (about 0 by construction). Report held-out values separately.",
+  "isotonic_knots": {
+    "optical": {
+      "x": [
+        0.011719,
+        0.074219,
+        0.078125,
+        0.109375,
+        0.113281,
+        0.222656,
+        0.230469,
+        0.242188,
+        0.246094,
+        0.273438,
+        0.28125,
+        0.683594,
+        0.691406,
+        0.71875,
+        0.726562,
+        0.867188,
+        0.902344,
+        0.9375
+      ],
+      "y": [
+        0.0,
+        0.0,
+        0.065217,
+        0.065217,
+        0.144928,
+        0.144928,
+        0.333333,
+        0.333333,
+        0.5,
+        0.5,
+        0.587302,
+        0.587302,
+        0.666667,
+        0.666667,
+        0.714286,
+        0.714286,
+        0.777778,
+        0.777778
+      ]
+    },
+    "radar": {
+      "x": [
+        0.0625,
+        0.132812,
+        0.136719,
+        0.140625,
+        0.171875,
+        0.175781,
+        0.179688,
+        0.183594,
+        0.226562,
+        0.230469,
+        0.238281,
+        0.242188,
+        0.34375
+      ],
+      "y": [
+        0.0,
+        0.0,
+        0.076923,
+        0.1,
+        0.1,
+        0.333333,
+        0.333333,
+        0.344828,
+        0.344828,
+        0.6,
+        0.6,
+        0.703704,
+        0.703704
+      ]
+    }
+  },
+  "conformal_diagnostics": {
+    "optical": {
+      "0.01": {
+        "threshold": 0.0,
+        "k": 0,
+        "n": 76,
+        "status": "conservative_fallback",
+        "alpha": 0.01,
+        "min_required_n": 99,
+        "note": "Sample size n=76 < 99; no exact quantile exists, so every tile is kept (threshold 0.0)."
+      },
+      "0.05": {
+        "threshold": 0.085938,
+        "k": 3,
+        "n": 76,
+        "status": "exact",
+        "alpha": 0.05,
+        "note": "k-th smallest score with 1-based k=3 (0-based index 2)."
+      },
+      "0.1": {
+        "threshold": 0.132812,
+        "k": 7,
+        "n": 76,
+        "status": "exact",
+        "alpha": 0.1,
+        "note": "k-th smallest score with 1-based k=7 (0-based index 6)."
+      }
+    },
+    "radar": {
+      "0.01": {
+        "threshold": 0.0,
+        "k": 0,
+        "n": 42,
+        "status": "conservative_fallback",
+        "alpha": 0.01,
+        "min_required_n": 99,
+        "note": "Sample size n=42 < 99; no exact quantile exists, so every tile is kept (threshold 0.0)."
+      },
+      "0.05": {
+        "threshold": 0.140625,
+        "k": 2,
+        "n": 42,
+        "status": "exact",
+        "alpha": 0.05,
+        "note": "k-th smallest score with 1-based k=2 (0-based index 1)."
+      },
+      "0.1": {
+        "threshold": 0.148438,
+        "k": 4,
+        "n": 42,
+        "status": "exact",
+        "alpha": 0.1,
+        "note": "k-th smallest score with 1-based k=4 (0-based index 3)."
+      }
+    }
+  }
+}
