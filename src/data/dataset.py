@@ -130,7 +130,12 @@ def process_event_chips(
         opt_dict = {generate_tile_id(chip_id, r, c): arr for r, c, arr in opt_tiles}
         rad_dict = {generate_tile_id(chip_id, r, c): arr for r, c, arr in rad_tiles}
 
-        split_name = chip_splits.get(chip_id, "holdout" if event_name == "Bolivia" else "train") if chip_splits else "holdout"
+        # A chip without a known split must be an error. (The old default labelled every tile
+        # "holdout" when chip_splits was omitted, which would have silently emptied the training set.)
+        if not chip_splits or chip_id not in chip_splits:
+            raise ValueError(f"No split known for chip {chip_id}; pass chip_splits "
+                             "(src.data.split_events.load_official_chip_splits) or use scripts/build_processed.py")
+        split_name = chip_splits[chip_id]
 
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):

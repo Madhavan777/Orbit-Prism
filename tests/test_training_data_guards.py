@@ -83,6 +83,27 @@ def test_radar_loader_reads_every_event_file(tmp_path, monkeypatch):
     assert not matched[matched["split"] == "train"]["event"].eq("Bolivia").any()
 
 
+def test_early_stopping_uses_held_back_events_not_the_calibration_split(tmp_path):
+    from src.constants import INTERNAL_VAL_EVENTS
+    from src.models import radar
+    import inspect
+    radar_default = inspect.signature(radar.train_radar_pipeline).parameters["internal_val_events"].default
+    assert tuple(radar_default) == tuple(INTERNAL_VAL_EVENTS)         # both models hold back the same events
+
+    data = tmp_path / "processed"
+    data.mkdir()
+    _write_event(data, "Bolivia", ["holdout"], seed=1)
+    _write_event(data, "Ghana", ["train", "valid"], seed=2)
+    _write_event(data, "Spain", ["train", "valid"], seed=3)          # an internal-validation event
+    res = _run_train(data, tmp_path)
+    out = res.stdout + res.stderr
+    assert res.returncode == 0, out[-2000:]
+    assert "TRAIN Set (cloud_frac < 0.5): 8 samples" in out          # Ghana train only; Spain train held back
+    assert "EARLY-STOPPING Set" in out and ": 8 samples" in out.split("EARLY-STOPPING Set")[1].splitlines()[0]
+    assert "CAL/VAL Set: 16 samples" in out                          # both events' valid tiles, untouched
+    assert "falls back" not in out
+
+
 def test_trainer_stops_when_calibration_split_is_missing(tmp_path):
     data = tmp_path / "processed"
     data.mkdir()

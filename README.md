@@ -31,6 +31,25 @@ python -m pytest tests -q          # full test suite
 
 `results/real_water_stats.csv` is committed, so you only need the raw download for `real_stats.py` and for anything using imagery.
 
+## Runbook: from raw data to the headline plot
+
+Run everything from the repo root, in this order. Each step names who owns it and what it writes.
+
+| # | Command | Who | Writes |
+|---|---|---|---|
+| 0 | `git pull`, `pip install -r requirements.txt` | everyone | |
+| 1 | `python scripts/download_flood.py --imagery` (1.7 GB; `--events Bolivia Ghana` for a subset) | everyone who trains | `data/raw/` (git-ignored) |
+| 2 | `python scripts/build_processed.py` (about 3 minutes; prints `OK` per event and exits 0 only if every event matches `tiles_base.csv`) | everyone who trains | `data/processed/<event>.npz` (git-ignored, about 450 MB) |
+| 3 | `python scripts/train.py` | Shenbaga | `models/optical_float.keras` |
+| 4 | `python scripts/predict.py` | Shenbaga | `results/scores_optical_float.csv` |
+| 5 | `python -c "from src.models.radar import train_radar_pipeline as t; print(t(epochs=40))"` | Harish | `models/radar_float.keras`, `results/scores_radar_float.csv` |
+| 6 | `python scripts/quantize_and_score.py` (needs 3 to 5 pulled into one checkout) | Harish | `models/*_int8.tflite`, `results/scores_*_int8.csv`, `results/memory_table.csv` |
+| 7 | `python -m src.calibration.calibrate` | Agnel | `results/calibration.json` |
+| 8 | `python scripts/merge_scores.py` | Madhavan | `data/tiles.csv`, `data/tiles_all.csv` |
+| 9 | `python scripts/evaluate.py` | Madhavan | `results/headline.png`, `summary.csv`, `dial.csv`, `ablations.png` |
+
+`data/processed/` is not in git, so each person builds it locally (step 2) or receives the NPZ files from Agnel directly.
+
 ## Layout
 
 - `scripts/`: data statistics, fake-data generation, baselines

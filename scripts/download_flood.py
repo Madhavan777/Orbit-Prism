@@ -10,7 +10,10 @@ By default only labels, the JRC permanent-water layer and the split lists are
 fetched (about 3 MB). Add --imagery for S1Hand and S2Hand (about 1.7 GB).
 Existing files are skipped, so an interrupted run can simply be repeated.
 
-Run from the repo root:  python scripts/download_flood.py [--imagery]
+Run from the repo root:
+    python scripts/download_flood.py                          # labels, JRC, splits, dates (3 MB)
+    python scripts/download_flood.py --imagery                # + all S1Hand and S2Hand (1.7 GB)
+    python scripts/download_flood.py --imagery --events Bolivia Ghana   # imagery of some events only
 """
 import json
 import sys
@@ -44,8 +47,21 @@ def list_objects(prefix):
 
 
 def main():
-    prefixes = SMALL + (IMAGERY if "--imagery" in sys.argv else [])
+    args = sys.argv[1:]
+    events = []
+    if "--events" in args:  # --events Bolivia Ghana : only imagery of those events (labels are tiny, always all)
+        i = args.index("--events") + 1
+        while i < len(args) and not args[i].startswith("--"):
+            events.append(args[i])
+            i += 1
+    prefixes = SMALL + (IMAGERY if "--imagery" in args else [])
     objs = [o for p in prefixes for o in list_objects(p)]
+    if events:
+        def wanted(o):
+            name = o["name"].rsplit("/", 1)[-1]
+            return "/S1Hand/" not in o["name"] and "/S2Hand/" not in o["name"] or any(
+                name.startswith(f"{e}_") for e in events)
+        objs = [o for o in objs if wanted(o)]
     total = sum(int(o["size"]) for o in objs)
     print(f"{len(objs)} files, {total / 1e6:.1f} MB")
     todo = [o for o in objs if not _have(o)]

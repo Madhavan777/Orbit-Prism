@@ -13,3 +13,6 @@ CRITICAL_THRESHOLD = 0.30
 CLOUD_SWITCH = 0.5          # cloud_frac >= this -> radar
 SCALED_PASS_FRACTION = 0.20 # of the event's all-optical volume; label "scaled"
 TEST_SPLIT = "holdout"      # Bolivia
+# Whole events whose `train` tiles are held back for early stopping / model selection by BOTH
+# models, so the `valid` split stays untouched until calibration. (Radar default matches.)
+INTERNAL_VAL_EVENTS = ("Spain", "Somalia")
