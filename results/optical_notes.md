@@ -148,4 +148,44 @@ To evaluate run-to-run variance, the optical CNN was trained across 8 distinct r
 
 The early-stopping set contains only 15 critical tiles and the calibration split contains 118 critical tiles. Consequently, AUROC fluctuations on the order of $\pm 0.01$ to $0.02$ are expected statistical noise rather than genuine algorithmic differences. The committed production model (trained with seed 42, AUROC 0.9507) aligns closely with the 8-seed empirical mean (0.9500) and remains unchanged.
 
+## 10. Opaque clouds (headline setting)
+
+In commit `c05cdd0`, project simulated clouds were updated by default to **opaque clouds** (`alpha >= 0.5` pixels are set to pure white `255.0`), replicating complete visual occlusion from dense cloud cover. The optical float model was retrained on this revised dataset with `scripts/train.py`, and predictions across all 6,825 tiles were re-exported to `results/scores_optical_float.csv`.
+
+### Training configuration & metrics
+
+* **Random seed:** 42
+* **Hardware:** Native Windows CPU fallback (Intel x86_64, TensorFlow 2.21.0)
+* **Epochs run:** 11 epochs (early stopping triggered; best weights restored from epoch 6)
+* **Set sizes:**
+  * TRAIN set (`cloud_frac < 0.5`, excluding Spain/Somalia): 1,984 tiles (135 critical)
+  * Early-stopping set (`Spain` and `Somalia` train tiles): 300 tiles (15 critical)
+  * CAL/VAL set (`valid` split): 1,354 tiles (118 critical)
+  * HOLDOUT set (`Bolivia` event): 231 tiles (untouched, scored only)
+* **Model parameters & budget:** 15,682 parameters (FP32 weights: 61.26 KB $\le 100$ KB budget; checkpoint `models/optical_float.keras`: 260.90 KB)
+* **Overall calibration (valid) metrics:**
+  * **Early-stopping AUROC:** 0.9163
+  * **CAL / Valid AUROC:** 0.9494
+  * **Threshold at 90% Recall (Valid):** 0.0819 (achieved recall: 0.8983; 106 / 118 critical tiles)
+  * **CAL Recall (@ 0.5 threshold):** 0.4322 (51 / 118 critical tiles)
+  * **CAL Extent MAE:** 0.0902
+
+### Valid split AUROC by cloud bin (`results/optical_by_cloud_opaque.csv`)
+
+| Cloud Bin | Tiles | Critical | AUROC |
+| :--- | :---: | :---: | :---: |
+| `(0, 0.25]` | 503 | 50 | 0.9600 |
+| `(0.25, 0.5]` | 273 | 26 | 0.9495 |
+| `(0.5, 0.75]` | 282 | 17 | 0.9876 |
+| `(0.75, 1.0]` | 296 | 25 | 0.9210 |
+
+### Comparison with soft-haze model & cloud degradation
+
+1. **Overall comparison:** Under the earlier soft-haze simulation, valid split AUROC was 0.9507 with Recall (@ 0.5) of 0.4831 and Extent MAE of 0.0797. Under opaque clouds, valid split AUROC is 0.9494, Recall (@ 0.5) is 0.4322, and Extent MAE is 0.0902.
+2. **Behavior under dense clouds (75-100% bin):** AUROC on the 75-100% cloud bin is expected to fall well below the clear-tile value. While rank-ordering within the bin yields an AUROC of 0.9210, the absolute detection signal collapses dramatically:
+   - For clear tiles `(0, 0.25]`, critical flood tiles have a mean predicted flood probability of `0.6652`, and Recall (@ 0.5) is `68.0%`.
+   - For heavy cloud tiles `(0.75, 1.0]`, the mean predicted flood probability for critical tiles drops to **`0.1203`**, and Recall (@ 0.5) falls to **`0.00%`** (0 of 25 critical tiles reach 0.5; maximum predicted probability across all 25 critical tiles is only 0.2919).
+3. **Operational takeaway:** The opaque cloud simulation ensures that optical detection cannot reliably identify surface floods under heavy clouds, justifying satellite hand-off to Sentinel-1 SAR radar when `cloud_frac >= 0.5`.
+
+
 
