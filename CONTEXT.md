@@ -1,4 +1,4 @@
-# ORBIT-PRISM: project context
+﻿# ORBIT-PRISM: project context
 
 Hackathon: Conscientia 2k26 / HackOrbital 2026, PS 1.4 (TinyML visual triage and confidence-aware bandwidth optimizer for constrained telemetry links).
 
@@ -34,7 +34,7 @@ One row per tile. `data/fake_tiles.csv` and `results/real_water_stats.csv` (firs
 Design notes:
 - `tile_id` is not stored; it is `chip` + `row` + `col`.
 - Tile byte cost is not stored; it is derived from `sensor_used` (65,536 B optical, ~33,000 B radar).
-- Split is by event, never by chip, to avoid leakage.
+- Official train/valid/test are chip-level splits across events; only Bolivia is a held-out event (`holdout`). Report held-out-event results on Bolivia.
 - `CRITICAL_THRESHOLD` = 0.30 is a named constant so the 5% sensitivity analysis is a one-line change.
 
 ## Claims policy
