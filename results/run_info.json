@@ -11,7 +11,5 @@
     "radar": 0.140625
   },
   "scheduler": "sim",
-  "skipped": {
-    "colour_index": "needs p_ndwi (results/scores_ndwi.csv, from real band imagery)"
-  }
+  "skipped": {}
 }

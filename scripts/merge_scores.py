@@ -87,8 +87,15 @@ def merge_scores(
         if SCORES_NDWI.exists():
             nd = _score_table(SCORES_NDWI).rename(columns={"p_flood": "p_ndwi"})[KEY + ["p_ndwi"]]
             extra = extra.merge(nd, on=KEY, how="left")
-            if extra["p_ndwi"].isna().any():
-                raise SystemExit("scores_ndwi.csv does not cover every tile")
+            # The colour index needs band imagery, which is only on disk for some events. The
+            # held-out split is the one the headline comparison uses, so it must be fully covered;
+            # tiles of other events without imagery keep an empty p_ndwi.
+            if extra.loc[extra["split"] == "holdout", "p_ndwi"].isna().any():
+                raise SystemExit("scores_ndwi.csv does not cover every held-out tile")
+            n_nd = int(extra["p_ndwi"].isna().sum())
+            if n_nd:
+                logger.warning("p_ndwi is empty for %d tiles without band imagery (not needed for the "
+                               "held-out comparison)", n_nd)
     elif allow_placeholder:
         extra = None
         logger.warning("PLACEHOLDER: real scores not found; using SYNTHETIC scores from %s. "
