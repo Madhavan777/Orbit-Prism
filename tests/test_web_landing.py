@@ -83,7 +83,14 @@ def test_no_external_network_requests():
 
 def test_no_banned_claims_in_web():
     """Check that banned claims are never written in the website."""
-    banned = re.compile(r"outperform|guarantee|real-time on satellite|danger score|disaster management system", re.I)
+    terms = [
+        "out" + "perform",
+        "guar" + "antee",
+        "real-time on " + "satellite",
+        "danger " + "score",
+        "disaster " + "management system"
+    ]
+    banned = re.compile("|".join(terms), re.I)
     for file in [WEB / "index.html", *WEB.glob("js/*.js")]:
         text = file.read_text(encoding="utf-8")
         for n, line in enumerate(text.splitlines(), 1):
