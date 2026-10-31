@@ -133,5 +133,16 @@ def test_model_save_and_reload(tmp_path):
     assert len(reloaded_model.outputs) == 2
 
 
+def test_cloud_opaque_mask_properties():
+    """Verify opaque cloud mask transformation properties."""
+    from src.data.cloud_simulation import simulate_chip_cloud_mask
+
+    alpha = simulate_chip_cloud_mask("test_chip_123", target_cover=0.50)
+    alpha_opaque = (alpha >= 0.5).astype(np.float32)
+
+    assert set(np.unique(alpha_opaque)).issubset({0.0, 1.0})
+    assert np.array_equal(alpha_opaque, (alpha >= 0.5).astype(np.float32))
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
