@@ -3,7 +3,9 @@
 OPTICAL_B = 65_536          # 128x128 tile, 4 bands, 8-bit
 RADAR_B = 32_768            # 128x128 tile, 2 bands, 8-bit
 L0_B = 32                   # alert packet
-L1_BYTES = None             # preview size: Akhilesh decides and sets it
+# L1 preview size: 2,048 B (64x64 downsampled 8-bit / compressed preview).
+# Costs ~3.1% of an optical full tile, enabling ~32 previews per 1 full tile bandwidth.
+L1_BYTES = 2048
 PASS_BYTES = 19_200_000     # 256 kbps x 600 s
 SRAM_BYTES = 4_200_000      # on-device memory ceiling (4.2 MB)
 
