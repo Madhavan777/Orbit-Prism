@@ -144,8 +144,10 @@ def main():
     logs, skipped = {}, {}
     for policy in dict.fromkeys(list(SYSTEMS) + list(ABLATIONS)):
         try:
-            if args.scheduler == "sim" and policy in SYSTEMS:
-                logs[policy] = sim_run(test, policy, scaled_budget)
+            if args.scheduler == "sim":
+                # sim.run(tiles, policy, budget_bytes, thresholds=None): see CONTEXT.md. `thresholds`
+                # is {"optical": t, "radar": t}, the raw-p_flood cut-offs of the miss-rate dial.
+                logs[policy] = sim_run(test, policy, scaled_budget, thresholds=thresholds)
             else:
                 logs[policy] = run_policy(test, policy, thresholds)
         except NotAvailable as e:

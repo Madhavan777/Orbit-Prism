@@ -102,7 +102,7 @@ A tile is identified by `tile_id = <chip>_<row>_<col>`, equal to `chip, row, col
 
 Until `src/scheduler/sim.py` exists, `src/evaluation/reference_policies.py` is a clearly labelled stand-in that produces send logs for the five systems and two ablations (alerts then full tiles, no L1 previews); `scripts/evaluate.py --scheduler sim` switches to the real one. The evaluation metrics (`src/evaluation/metrics.py`) work on any send log in the format above.
 
-`src.scheduler.sim.run(tiles, policy, budget_bytes)` takes a DataFrame in the 11-column schema, a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism`, and a per-pass byte budget, and returns the send log. Shared constants live in `src/constants.py`. The L1 preview size is provisional at 2,048 B (in `src/data/generate_metadata.py`); Akhilesh confirms it in `src/constants.py`.
+`src.scheduler.sim.run(tiles, policy, budget_bytes, thresholds=None)` takes a DataFrame (the 11-column schema, plus `p_optical` and `p_ndwi` for the baselines that need them), a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism | orbit_no_radar | orbit_no_dial`, a per-pass byte budget, and the dial thresholds `{"optical": t, "radar": t}` (raw `p_flood` cut-offs from `calibration.json`; only the orbit policies use them), and returns the send log, sending over as many passes as it takes to empty the queue. `cum_bytes` counts bytes sent so far across passes (idle time between passes is not counted). Shared constants live in `src/constants.py`. The L1 preview size is provisional at 2,048 B (in `src/data/generate_metadata.py`); Akhilesh confirms it in `src/constants.py`.
 
 ## Known limitations (stated, not hidden)
 
