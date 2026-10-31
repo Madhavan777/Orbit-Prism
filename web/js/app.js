@@ -28,9 +28,11 @@ async function guard(fn, el) {                       // run an async UI action; 
 
 /* ------------------------------------------------------------------ top of page */
 async function init() {
-  initOrbitalCanvas();
   const s = (ST.status = await guard(API.status));
-  if (!s) { $("#stats").innerHTML = `<div class="notice err">The API is not running. Start it with: python -m uvicorn app.api:app --port 8000</div>`; return; }
+  if (!s) { $("#pill").textContent = "API offline"; $("#stats").innerHTML = `<div class="notice err">The API is not running. Start it with: python -m uvicorn app.api:app --port 8000</div>`; return; }
+  const pill = $("#pill");
+  pill.textContent = s.synthetic ? "PLACEHOLDER SCORES" : "REAL SCORES · " + s.headline_split.toUpperCase();
+  pill.classList.add(s.synthetic ? "syn" : "real");
   if (s.banner) {
     const b = $("#banner"); b.textContent = s.banner; b.style.display = "block"; document.body.classList.add("has-banner");
     const fit = () => document.documentElement.style.setProperty("--bh", b.offsetHeight + "px");   // the banner wraps on phones
@@ -44,7 +46,7 @@ async function init() {
   ].map(([b, t]) => `<div class="stat"><b>${esc(b)}</b><span>${esc(t)}</span></div>`).join("");
   $("#steps").innerHTML = STEPS.map(([t, d], i) => `
     <li class="${i === 9 ? "ground" : ""}" data-step="${i + 1}">
-      <span class="tier-badge ${i === 9 ? "tier-ground" : "tier-onboard"}">${i === 9 ? "GROUND RECEIPT" : "ONBOARD 4.2 MB"}</span>
+      <span class="tier-badge ${i === 9 ? "tier-ground" : "tier-onboard"}">${i === 9 ? "GROUND" : "ONBOARD"}</span>
       <b>${esc(t)}</b>
       <span>${esc(d)}</span>
       <div class="step-live" style="display:none;"></div>
@@ -52,6 +54,7 @@ async function init() {
   if (s.mode === "unavailable") { $("#try").insertAdjacentHTML("afterbegin", `<div class="notice err">No results are available yet. Run <code>python scripts/evaluate.py --allow-placeholder</code> (placeholder) or follow the runbook in README.md.</div>`); return; }
 
   ST.dial = await guard(API.dial);
+  ST.demo = await API.demoCase().then((d) => (d.available ? d : null)).catch(() => null);   // the demo tile is the opening selection
   $("#dial").innerHTML = s.dial_targets.map((a) => `<button type="button" data-a="${a}" aria-pressed="${a === ST.alpha}">${Math.round(a * 100)}%</button>`).join("");
   $("#dial").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setAlpha(+b.dataset.a); });
   $("#split").addEventListener("change", (e) => { ST.split = e.target.value; loadChips(); });
@@ -83,7 +86,8 @@ async function loadChips() {
   if (!r) return;
   const sel = $("#chip");
   sel.innerHTML = r.chips.map((c) => `<option value="${esc(c.chip)}">${esc(c.chip)} · ${c.tiles} tiles · ${c.critical} critical · ${Math.round(c.mean_cloud * 100)}% cloud</option>`).join("");
-  const best = r.chips.find((c) => c.critical > 0 && c.mean_cloud > 0.45) || r.chips.find((c) => c.critical > 0) || r.chips[0];
+  const best = (ST.demo && ST.split === "holdout" && r.chips.find((c) => c.chip === ST.demo.chip))
+    || r.chips.find((c) => c.critical > 0 && c.mean_cloud > 0.45) || r.chips.find((c) => c.critical > 0) || r.chips[0];
   if (best) { sel.value = best.chip; loadTiles(best.chip); }
 }
 
@@ -93,7 +97,7 @@ async function loadTiles(chip) {
   if (!r) return;
   ST.tiles = r.tiles;
   paintGrid();
-  const first = r.tiles.find((t) => t.critical) || r.tiles[0];
+  const first = (ST.demo && chip === ST.demo.chip && r.tiles.find((t) => t.tile_id === ST.demo.tile_id)) || r.tiles.find((t) => t.critical) || r.tiles[0];
   if (first) selectTile(first.tile_id);
 }
 
@@ -305,111 +309,33 @@ async function loadResults() {
   if (cur.curves) { const c = {}; Object.entries(cur.curves).forEach(([n, p]) => !n.includes("ablation") && (c[n] = p)); recallChart($("#chart"), c, { scaledMB: cur.scaled_pass_MB }); }
   else $("#chart").innerHTML = `<div class="notice err">${esc(cur.error)}</div>`;
   $("#summary").innerHTML = sum.rows ? summaryTable(sum.rows.filter((r) => !r.system.includes("ablation"))) : `<div class="notice err">${esc(sum.error)}</div>`;
-  $("#dialtable").innerHTML = dial.measured ? (dial.measured.length ? `<table><tr><th>path</th><th>target miss rate</th><th>threshold</th><th>critical tiles</th><th>missed</th><th>achieved</th></tr>` + dial.measured.map((d) =>
-    `<tr><td>${esc(d.path)}</td><td>${F.pct(d.target_miss_rate, 0)}</td><td>${F.n(d.threshold)}</td><td>${d.critical_tiles}</td><td>${d.missed}</td><td>${F.pct(d.achieved_miss_rate)}</td></tr>`).join("") + `</table><p class="small muted">A target is met only if test data resembles the calibration data; the achieved rate is whatever was measured.</p>` : "<p class='muted'>Not available yet.</p>") : `<div class="notice err">${esc(dial.error)}</div>`;
+  $("#dialtable").innerHTML = dial.measured ? (dial.measured.length ? `<table><tr><th>path</th><th>target miss rate</th><th>cut-off</th><th>critical tiles</th><th>missed</th><th>achieved miss rate</th></tr>` + dial.measured.map((d) => {
+    const all = Number(d.threshold) === 0;
+    return `<tr><td>${esc(d.path)}</td><td>${F.pct(d.target_miss_rate, 0)}</td><td>${F.n(d.threshold)}</td><td>${d.critical_tiles}</td><td>${d.missed}</td><td>${all ? "not met: keeps every tile" : F.pct(d.achieved_miss_rate)}</td></tr>`;
+  }).join("") + `</table><p class="small muted">A 1% target needs at least 99 critical calibration tiles; with fewer, the cut-off is 0 and every tile is kept (nothing missed, nothing saved). A target is met only if test data resembles the calibration data; the achieved rate is whatever was measured.</p>` : "<p class='muted'>Not available yet.</p>") : `<div class="notice err">${esc(dial.error)}</div>`;
   $("#memory").innerHTML = mem.rows && mem.rows.length ? `<table><tr><th>model</th><th>dtype</th><th>weights KB</th><th>peak activation KB (est.)</th><th>total KB</th><th>% of 4.2 MB</th><th>MACs</th><th>recall</th><th>ece</th><th>basis</th></tr>` + mem.rows.map((m) =>
-    `<tr><td>${esc(m.model)}</td><td>${esc(m.dtype)}</td><td>${F.kb(m.weights_bytes)}</td><td>${F.kb(m.peak_activation_bytes)}</td><td>${F.kb(m.total_bytes)}</td><td>${F.pct(m.total_bytes / mem.sram_bytes)}</td><td>${Number(m.macs).toLocaleString()}</td><td>${esc(m.recall)}</td><td>${esc(m.ece)}</td><td>${esc(m.basis)}</td></tr>`).join("") + `</table>` : `<p class="muted">The memory table has not been produced yet (it comes from the INT8 step).</p>`;
-  if (demo.available) {
-    const d = $("#democase"); d.hidden = false;
-    d.innerHTML = `<h3>A flood hidden under cloud</h3><p>${esc(demo.note || "")}</p>` + (demo.tile_id ? `<div class="imgs"><figure><img alt="optical under cloud" src="${API.imageUrl(demo.tile_id, "optical", 2)}">optical under cloud</figure><figure><img alt="radar" src="${API.imageUrl(demo.tile_id, "radar", 2)}">radar</figure><figure><img alt="label" src="${API.imageUrl(demo.tile_id, "label", 2)}">label</figure></div>` : "");
-  }
+    `<tr><td>${esc(m.model)}</td><td>${esc(m.dtype)}</td><td>${F.kb(m.weights_bytes)}</td><td>${F.kb(m.peak_activation_bytes)}</td><td>${F.kb(m.total_bytes)}</td><td>${F.pct(m.total_bytes / mem.sram_bytes)}</td><td>${Number(m.macs).toLocaleString()}</td><td>${esc(m.recall)}</td><td>${esc(m.ece)}</td><td>${esc(m.basis)}</td></tr>`).join("") + `</table><p class="small muted">Weights are measured; peak activation is estimated from the model graph. Recall and ECE are on the validation split at the float model's 90%-recall cut-off. Radar INT8 recall of 1 means that cut-off keeps almost every tile (INT8 radar scores are compressed upward), not a better model.</p>` : `<p class="muted">The memory table has not been produced yet (it comes from the INT8 step).</p>`;
+  if (demo.available) renderDemoCase(demo);
+  else $("#democase").innerHTML = `<h3>A flood hidden under cloud</h3><div class="muted small">The demo tile is chosen from real scores once the evaluation has been run.</div>`;
 }
 
-/* ------------------------------------------------------------------ hero orbital canvas */
-function initOrbitalCanvas() {
-  const canvas = $("#orbitalCanvas");
-  if (!canvas || !canvas.getContext) return;
-  const ctx = canvas.getContext("2d");
-  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let angle = 0;
-
-  function render() {
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-
-    // Deep space backdrop grid
-    ctx.strokeStyle = "rgba(36, 91, 255, 0.12)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-    // Planetary Horizon Arc
-    const cx = W / 2, cy = H * 1.6, r = H * 1.15;
-    const grad = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.1);
-    grad.addColorStop(0, "#081b3d");
-    grad.addColorStop(0.85, "#0e3477");
-    grad.addColorStop(1, "rgba(36, 91, 255, 0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, Math.PI, 0);
-    ctx.fill();
-
-    // Atmosphere limb glow
-    ctx.strokeStyle = "rgba(74, 136, 255, 0.65)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, Math.PI * 1.15, Math.PI * 1.85);
-    ctx.stroke();
-
-    // India Nadir Ground Target
-    const tx = W * 0.54, ty = H * 0.62;
-    ctx.fillStyle = "#c6ff00";
-    ctx.beginPath();
-    ctx.arc(tx, ty, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Concentric Target Ping
-    const pingR = prefersReduced ? 10 : 6 + (Math.sin(angle * 2.5) + 1) * 6;
-    ctx.strokeStyle = "rgba(198, 255, 0, 0.4)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(tx, ty, pingR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Orbiting Satellite Position
-    const satOrbitR = r * 1.28;
-    const satAngle = prefersReduced ? -Math.PI * 0.68 : -Math.PI * 0.68 + Math.sin(angle * 0.8) * 0.14;
-    const sx = cx + Math.cos(satAngle) * satOrbitR;
-    const sy = cy + Math.sin(satAngle) * satOrbitR;
-
-    // Laser link from satellite to target
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.lineDashOffset = prefersReduced ? 0 : -angle * 20;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Traveling Photonic Packets (Acid Lime priority + White)
-    if (!prefersReduced) {
-      for (let p = 0; p < 3; p++) {
-        const t = ((angle * 0.8 + p * 0.33) % 1.0);
-        const px = sx + (tx - sx) * t;
-        const py = sy + (ty - sy) * t;
-        ctx.fillStyle = p === 0 ? "#c6ff00" : "#ffffff";
-        ctx.beginPath();
-        ctx.arc(px, py, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Satellite Bus & Solar Panels
-    ctx.fillStyle = "#d99b26"; // Kapton Gold
-    ctx.fillRect(sx - 5, sy - 3, 10, 6);
-    ctx.fillStyle = "#245bff"; // Solar wings
-    ctx.fillRect(sx - 16, sy - 2, 9, 4);
-    ctx.fillRect(sx + 7, sy - 2, 9, 4);
-
-    if (!prefersReduced) {
-      angle += 0.03;
-      requestAnimationFrame(render);
-    }
-  }
-
-  render();
+function renderDemoCase(d) {
+  const del = d.full_tile_delivery || {}, cl = d.cloudy_critical_tiles_delivered || {};
+  const o = del["ORBIT-PRISM"];
+  const sent = (n) => (del[n] ? "sent as packet " + del[n].order + " after " + del[n].cum_MB.toFixed(2) + " MB" : "<b>not delivered</b> within the scaled pass");
+  $("#democase").innerHTML = `
+    <h3>A flood hidden under cloud · held-out ${esc(d.event)}</h3>
+    <div class="imgs">
+      <figure><img alt="optical under simulated cloud" src="${API.imageUrl(d.tile_id, "optical", 2)}">optical, ${F.pct(d.cloud_frac, 0)} cloud</figure>
+      <figure><img alt="radar" src="${API.imageUrl(d.tile_id, "radar", 2)}">radar (sees through cloud)</figure>
+      <figure><img alt="hand label" src="${API.imageUrl(d.tile_id, "label", 2)}">hand label: ${F.pct(d.truth.water_frac, 0)} flood</figure>
+    </div>
+    <div class="facts">
+      <span>Routed to <b>${esc(d.routed_to)}</b> (cloud ≥ 50%). Radar score <b>${F.n(d.scores.p_radar, 2)}</b> against a ${Math.round(d.dial_target * 100)}% dial cut-off of <b>${F.n(d.thresholds.radar, 2)}</b>: ${d.kept_by_dial ? "kept" : "skipped"}.</span>
+      <span>ORBIT-PRISM: ${sent("ORBIT-PRISM")}. Discard cloudy: ${sent("Discard cloudy")}. Optical-only: ${sent("Optical-only triage")}.</span>
+      <span>Across all ${cl.total} critical cloudy tiles: ORBIT-PRISM delivers <b>${cl["ORBIT-PRISM"]}</b>, optical-only ${cl["Optical-only triage"]}, capture order ${cl["Capture order"]}, discard cloudy ${cl["Discard cloudy"]}.</span>
+      <span class="muted">${esc((d.caveats || []).join(" "))}</span>
+    </div>`;
 }
 
 init();

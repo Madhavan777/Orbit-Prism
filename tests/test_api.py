@@ -191,7 +191,7 @@ def test_every_element_the_javascript_looks_up_exists_in_the_html():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     ids = set(re.findall(r'\bid="([A-Za-z0-9_-]+)"', html))
     used = set(re.findall(r'\$\("#([A-Za-z0-9_-]+)"\)', (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")))
-    created_at_runtime = {"simchart"}
+    created_at_runtime = {"simchart", "budgetFill", "budgetPct", "budgetVal", "playQueueBtn", "playStatus"}
     missing = used - ids - created_at_runtime
     assert not missing, f"web/js/app.js uses ids that web/index.html does not define: {sorted(missing)}"
 
