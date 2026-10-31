@@ -39,3 +39,4 @@
 - 8-section Catmull-Rom continuous cubic spline interpolation mapping scroll s ∈ [0, 1] to camera positions, Earth positions/orientations, satellite poses, and atmospheric Fresnel glow.
 - Razor-thin coherent laser beam with traveling photonic data packets.
 - Interactive 3D orbit drag inspection toggle with dampening.
+
