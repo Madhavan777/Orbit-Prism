@@ -8,7 +8,11 @@ const F = {
   n: (v, d = 3) => (v == null ? "–" : Number(v).toFixed(d)),
   kb: (b) => (b == null || b === "NOT_MEASURED" ? "–" : (b / 1024).toFixed(1)),
 };
-const ST = { status: null, alpha: 0.05, split: "holdout", chip: null, tiles: [], sel: null, dial: null, simTimer: null };
+const ST = { status: null, alpha: 0.05, event: "Bolivia", view: "optical", chip: null, tiles: [], sel: null, dial: null, simTimer: null, runs: [] };
+const EVENT_PLACE = {   // centre of each event's footprint (Sen1Floods11 metadata), for the marker on the Earth
+  Bolivia: [-13.8, -65.02], Ghana: [8.68, -1.11], India: [26.48, 93.1], Mekong: [12.13, 105.32], Nigeria: [7.65, 5.79],
+  Pakistan: [30.03, 70.75], Paraguay: [-24.74, -56.56], Somalia: [4.51, 45.26], Spain: [38.49, 0.0], "Sri-Lanka": [7.58, 81.09], USA: [39.35, -95.05],
+};
 const STEPS = [
   ["Chip sits in storage", "A full 13-band chip is 6.8 MB, more than the 4.2 MB of working memory, so it stays in flash and streams in."],
   ["Cut into 16 tiles", "128×128 pixels each: 65,536 B optical, 32,768 B radar."],
@@ -53,15 +57,26 @@ async function init() {
     </li>`).join("");
   if (s.mode === "unavailable") { $("#try").insertAdjacentHTML("afterbegin", `<div class="notice err">No results are available yet. Run <code>python scripts/evaluate.py --allow-placeholder</code> (placeholder) or follow the runbook in README.md.</div>`); return; }
 
+  $("#hudTarget").textContent = ST.event;
   ST.dial = await guard(API.dial);
   ST.demo = await API.demoCase().then((d) => (d.available ? d : null)).catch(() => null);   // the demo tile is the opening selection
   $("#dial").innerHTML = s.dial_targets.map((a) => `<button type="button" data-a="${a}" aria-pressed="${a === ST.alpha}">${Math.round(a * 100)}%</button>`).join("");
   $("#dial").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setAlpha(+b.dataset.a); });
-  $("#split").addEventListener("change", (e) => { ST.split = e.target.value; loadChips(); });
+  $("#event").innerHTML = [...s.events].sort((a, b) => (b.split === "holdout") - (a.split === "holdout") || a.event.localeCompare(b.event)).map((e) =>
+    `<option value="${esc(e.event)}">${esc(e.event)}${e.split === "holdout" ? " (held out, never trained on)" : ""} · ${e.tiles} tiles · ${e.critical} critical</option>`).join("");
+  $("#event").addEventListener("change", (e) => { ST.event = e.target.value; loadChips(); });
+  $("#gridview").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    ST.view = b.dataset.v;
+    document.querySelectorAll("#gridview button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    paintGrid();
+  });
+  $("#budget").addEventListener("input", (e) => ($("#budgetLabel").textContent = Math.round(e.target.value * 100) + "%"));
   $("#chip").addEventListener("change", (e) => loadTiles(e.target.value));
   $("#upcloud").addEventListener("input", (e) => ($("#upcloudv").textContent = Math.round(e.target.value * 100) + "%"));
   $("#upgo").addEventListener("click", uploadTile);
-  $("#simgo").addEventListener("click", runSim);
+  $("#simgo").addEventListener("click", () => runSim({ redraw_clouds: true, cloud_seed: 42 }));
+  $("#simnew").addEventListener("click", () => runSim({ redraw_clouds: true }));
   setAlpha(ST.alpha, true);
   loadChips();
   loadResults();
@@ -82,12 +97,19 @@ function setAlpha(a, quiet) {
 
 /* ------------------------------------------------------------------ try it */
 async function loadChips() {
-  const r = await guard(() => API.chips(ST.split), $("#grid"));
+  const r = await guard(() => API.chips(ST.event), $("#grid"));
   if (!r) return;
   const sel = $("#chip");
-  sel.innerHTML = r.chips.map((c) => `<option value="${esc(c.chip)}">${esc(c.chip)} · ${c.tiles} tiles · ${c.critical} critical · ${Math.round(c.mean_cloud * 100)}% cloud</option>`).join("");
-  const best = (ST.demo && ST.split === "holdout" && r.chips.find((c) => c.chip === ST.demo.chip))
-    || r.chips.find((c) => c.critical > 0 && c.mean_cloud > 0.45) || r.chips.find((c) => c.critical > 0) || r.chips[0];
+  sel.innerHTML = r.chips.map((c) => `<option value="${esc(c.chip)}">${esc(c.chip)} · ${esc(c.split)} · ${c.tiles} tiles · ${c.critical} critical · ${Math.round(c.mean_cloud * 100)}% cloud</option>`).join("");
+  const held = r.chips.every((c) => c.split === "holdout");
+  $("#eventnote").textContent = held
+    ? "Bolivia is the held-out flood: no model ever trained or calibrated on it, so this is the honest test."
+    : `${ST.event}: its chips were assigned to train, valid and test by the dataset, and each chip shows its split. The models trained on the train chips, so scores there are not a fair test.`;
+  const place = EVENT_PLACE[ST.event];
+  if (place && window.setTarget3D) window.setTarget3D(place[0], place[1]);
+  if ($("#hudTarget")) $("#hudTarget").textContent = ST.event;
+  const demo = ST.demo && r.chips.find((c) => c.chip === ST.demo.chip);
+  const best = demo || r.chips.find((c) => c.critical > 0 && c.mean_cloud > 0.45) || r.chips.find((c) => c.critical > 0) || r.chips[0];
   if (best) { sel.value = best.chip; loadTiles(best.chip); }
 }
 
@@ -110,11 +132,12 @@ function paintGrid() {
     if (!t) { h += `<div class="tile" aria-hidden="true"><div class="nopx">no valid pixels</div></div>`; continue; }
     const kept = t.kept[String(ST.alpha)];
     h += `<button type="button" class="tile ${kept ? "keep" : "skip"} ${t.tile_id === ST.sel ? "sel" : ""}" data-id="${esc(t.tile_id)}" aria-label="Tile row ${r} column ${c}, ${kept ? "kept" : "skipped"}${t.critical ? ", critical" : ""}, ${t.sensor_used}">
-      <img loading="lazy" alt="" src="${API.imageUrl(t.tile_id, "optical", 1)}" onerror="this.outerHTML='<div class=&quot;nopx&quot;>pixels not built</div>'">
+      <img loading="lazy" alt="" src="${API.imageUrl(t.tile_id, ST.view, 2)}" onerror="this.outerHTML='<div class=&quot;nopx&quot;>imagery not on disk</div>'">
       <span class="badge ${t.sensor_used === "radar" ? "r" : ""}">${t.sensor_used === "radar" ? "R" : "O"}</span>${t.critical ? '<span class="crit" title="critical">★</span>' : ""}</button>`;
   }
   grid.innerHTML = h;
   grid.querySelectorAll("button.tile").forEach((b) => b.addEventListener("click", () => selectTile(b.dataset.id)));
+  if (window.setChip3D) window.setChip3D(ST.tiles, ST.alpha);
 
   // Print keep/skip and critical counts as text as well as colour
   const countsEl = $("#grid-counts");
@@ -134,6 +157,8 @@ async function selectTile(id) {
   if (r) {
     renderDetail(r, $("#detail"), true);
     highlightPipelineSteps(r);
+    const t = ST.tiles.find((x) => x.tile_id === id);
+    if (t && window.highlight3DTile) window.highlight3DTile(t.row * 4 + t.col);
   }
 }
 
@@ -149,16 +174,16 @@ function hexBytes(hex) {
 function renderDetail(r, el, withImages) {
   const both = r.both_models || {}, id = r.tile_id;
   const kept = r.decision === "KEEP";
-  const img = (kind, label) => `<figure><img alt="${label}" src="${API.imageUrl(id, kind, 2)}" onerror="this.outerHTML='<div class=&quot;ph&quot;>not available</div>'">${label}</figure>`;
+  const img = (kind, label) => `<figure><img alt="${label}" src="${API.imageUrl(id, kind, 3)}" onerror="this.outerHTML='<div class=&quot;ph&quot;>not available</div>'">${label}</figure>`;
   const modelRows = ["optical", "radar"].filter((m) => both[m]).map((m) =>
     `<dt>${m} model (${esc(both[m].model)})</dt><dd>${F.n(both[m].p_flood)} flood probability${m === r.routed_to ? " <b>(used)</b>" : ""}</dd>`).join("");
   el.innerHTML = `
-    ${withImages ? `<div class="imgs">${img("optical", "optical, simulated cloud")}${img("radar", "radar (VV)")}${img("label", "label: yellow = flood")}</div>` : ""}
+    ${withImages ? `<div class="imgs">${img("clear", "infrared, no cloud")}${img("optical", "what the camera gets")}${img("radar", "radar (water is dark)")}${img("label", "hand label: lime = flood")}</div>` : ""}
     <h3 style="margin-top:14px">${esc(id)}</h3>
     <p class="small">Cloud cover <b>${F.pct(r.cloud_frac, 0)}</b> ${r.routed_to === "radar" ? "≥" : "<"} ${F.pct(r.cloud_switch, 0)}, so this tile is routed to the <b>${esc(r.routed_to)}</b> model.
       A system that discards cloudy frames would <b>${esc(r.discard_cloudy_would)}</b>.</p>
     <div class="meter" aria-hidden="true"><div class="fill" style="width:${(r.p_flood * 100).toFixed(1)}%"></div><div class="thr" style="left:${(r.threshold * 100).toFixed(1)}%" title="dial threshold"></div></div>
-    <p class="small">Flood probability <b>${F.n(r.p_flood)}</b>, dial threshold <b>${F.n(r.threshold)}</b> (yellow marker, ${Math.round(r.alpha * 100)}% target miss rate)${r.threshold_is_send_everything ? ": threshold 0, keeps everything" : ""}.</p>
+    <p class="small">Flood probability <b>${F.n(r.p_flood)}</b>, dial threshold <b>${F.n(r.threshold)}</b> (lime marker, ${Math.round(r.alpha * 100)}% target miss rate)${r.threshold_is_send_everything ? ": threshold 0, keeps everything" : ""}.</p>
     <p><span class="decision ${kept ? "keep" : "skip"}"><span aria-hidden="true">${kept ? "✔" : "✖"}</span> ${esc(r.decision)}</span>
       ${r.outcome ? ` <b style="margin-left:8px">${esc(r.outcome)}</b>` : ""}</p>
     <dl class="kv">${modelRows}<dt>Extent</dt><dd>${F.pct(r.extent)} of the tile</dd><dt>Priority</dt><dd>${F.n(r.priority, 4)} (probability × extent)</dd>
@@ -212,85 +237,93 @@ async function uploadTile() {
 }
 
 /* ------------------------------------------------------------------ link simulator */
-async function runSim() {
+async function runSim(opts) {
   if (ST.simTimer) { clearInterval(ST.simTimer); ST.simTimer = null; }
-  const out = $("#simout"); out.innerHTML = `<p class="muted">Running simulation…</p>`;
-  const body = { split: ST.split, alpha: ST.alpha, chip: $("#scope").value === "chip" ? ST.chip : null };
+  const out = $("#simout"), btns = [$("#simnew"), $("#simgo")];
+  btns.forEach((b) => (b.disabled = true));
+  out.innerHTML = `<p class="muted glass">Simulating clouds and running the optical model on every tile…</p>`;
+  const chipScope = $("#scope").value === "chip";
+  const body = { event: chipScope ? null : ST.event, chip: chipScope ? ST.chip : null, alpha: ST.alpha, scaled_fraction: +$("#budget").value, ...opts };
   const r = await guard(() => API.simulate(body), out);
+  btns.forEach((b) => (b.disabled = false));
   if (!r) return;
   const curves = {}; Object.entries(r.systems).forEach(([n, s]) => (curves[n] = s.curve));
   const rows = Object.entries(r.systems).map(([n, s]) => ({ system: n, ...s.summary }));
   const orbit = r.systems["ORBIT-PRISM"];
+  const passes = orbit ? orbit.passes : [];
+  const total = passes.reduce((a, p) => a + p.MB, 0);
   out.innerHTML = `
-    <div class="notice">${esc(r.selection.tiles)} tiles, ${esc(r.selection.critical)} critical. ${esc(r.scaled_note)} (${r.scaled_budget_MB.toFixed(2)} MB). Dial ${Math.round(r.alpha * 100)}%.</div>
-    ${r.selection.critical === 0 ? `<div class="notice err">No critical tiles in this selection, so recall is undefined. Choose a chip with a ★ tile or the whole split.</div>` : ""}
+    <div class="notice"><b>Cloud seed ${r.weather.cloud_seed}${r.weather.cloud_seed === 42 ? " (the measured clouds)" : ""}</b> · mean cloud ${F.pct(r.weather.mean_cloud, 0)} · ${r.weather.radar_routed} of ${r.selection.tiles} tiles routed to radar · ${r.selection.critical} critical · dial ${Math.round(r.alpha * 100)}% · ${esc(r.scaled_note)} (${r.scaled_budget_MB.toFixed(2)} MB).</div>
+    ${r.selection.critical === 0 ? `<div class="notice err">No critical tiles in this selection, so recall is undefined. Choose a chip with a ★ tile or the whole event.</div>` : ""}
+    <div class="verdict">${r.dial.map(dialVerdict).join("")}</div>
     <div class="card chart" id="simchart"></div>
-    <div class="card" style="margin-top:14px"><div class="tablewrap">${summaryTable(rows)}</div></div>
+    <div class="card"><div class="tablewrap">${summaryTable(rows)}</div></div>
     ${Object.keys(r.skipped).length ? `<div class="notice">Not run: ${Object.entries(r.skipped).map(([k, v]) => esc(k + " (" + v + ")")).join("; ")}</div>` : ""}
-    ${orbit ? `
-      <div class="card" style="margin-top:14px" id="budgetProgress">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <div><b>Downlink transmission sequence</b>: <span id="budgetVal">0.00 / ${r.scaled_budget_MB.toFixed(2)} MB</span></div>
-          <div class="small muted" id="budgetPct">0% of scaled pass</div>
-        </div>
-        <div class="meter" style="height:12px; margin:8px 0 6px;"><div id="budgetFill" class="fill" style="width:0%; transition:width 0.12s linear;"></div></div>
-        <div style="display:flex; gap:12px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button type="button" class="btn play" id="playQueueBtn">▶ Play downlink sequence</button>
-          <span id="playStatus" class="small muted">Press Play to animate packet transmission against the scaled pass budget.</span>
+    ${orbit && passes.length ? `
+      <div class="card" id="budgetProgress">
+        <div><b>Downlink sequence.</b> ORBIT-PRISM queues <b>${total.toFixed(3)} MB</b> in total. Each pass carries at most <b>${r.scaled_budget_MB.toFixed(2)} MB</b>, so it takes <b>${passes.length} pass${passes.length > 1 ? "es" : ""}</b>; what does not fit waits for the next one.</div>
+        <div class="pass-bars" id="passBars">${passes.map((p) => `<div class="pass-bar" data-p="${p.pass_index}"><div class="meter"><div class="fill" style="width:0%"></div></div><span>pass ${p.pass_index + 1}: ${p.MB.toFixed(3)} MB</span></div>`).join("")}</div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn play" id="playQueueBtn">▶ Play downlink</button>
+          <span class="small"><span id="budgetVal">pass 1: 0.000 / ${r.scaled_budget_MB.toFixed(2)} MB</span> · <span class="muted" id="budgetPct">0.000 MB sent in total</span></span>
+          <span id="playStatus" class="small muted"></span>
         </div>
       </div>
-      <div class="card" style="margin-top:14px">
-        <h3>ORBIT-PRISM send queue: the first 15 packets of each layer (of ${orbit.total_packets.toLocaleString()} in total)</h3>
+      <div class="card">
+        <h3 class="sub first">ORBIT-PRISM send queue (${orbit.queue_preview.length === orbit.total_packets ? "all" : "sample of"} ${orbit.total_packets.toLocaleString()} packets)</h3>
         <div class="queue" id="queueTableWrap">${queueTable(orbit.queue_preview)}</div>
       </div>` : ""}`;
   recallChart($("#simchart"), curves, { scaledMB: r.scaled_budget_MB });
+  if (orbit && $("#playQueueBtn")) $("#playQueueBtn").addEventListener("click", () => playQueueAnimation(orbit.queue_preview, r.scaled_budget_MB));
+  addRun(r, rows);
+}
 
-  if (orbit && orbit.queue_preview && $("#playQueueBtn")) {
-    $("#playQueueBtn").addEventListener("click", () => playQueueAnimation(orbit.queue_preview, r.scaled_budget_MB));
-  }
+function dialVerdict(d) {
+  if (!d.critical) return `<div><b>${esc(d.path)} path</b>no critical tiles on this path in this run</div>`;
+  const held = d.achieved <= d.target;
+  return `<div class="${held ? "held" : "broke"}"><b>${esc(d.path)} path: ${held ? "promise held" : "promise broken"}</b>${d.missed} of ${d.critical} critical tiles missed = ${F.pct(d.achieved)}, target ${F.pct(d.target, 0)}. One tile is ${F.pct(1 / d.critical)} here.</div>`;
+}
+
+function addRun(r, rows) {
+  const by = Object.fromEntries(rows.map((x) => [x.system, x]));
+  const d = Object.fromEntries(r.dial.map((x) => [x.path, x]));
+  const cell = (x) => (x && x.critical ? `<td class="${x.achieved <= x.target ? "ok" : "no"}">${x.missed}/${x.critical}</td>` : "<td>–</td>");
+  ST.runs.unshift({ html: `<tr><td>${ST.runs.length + 1}</td><td>${esc(r.selection.event || r.selection.chip)}</td><td>${r.weather.cloud_seed}</td><td>${F.pct(r.weather.mean_cloud, 0)}</td><td>${Math.round(r.alpha * 100)}%</td><td>${Math.round(r.scaled_fraction * 100)}%</td><td>${F.pct((by["ORBIT-PRISM"] || {}).recall_at_scaled_pass)}</td><td>${F.pct((by["Optical-only triage"] || {}).recall_at_scaled_pass)}</td><td>${F.pct((by["Colour-index triage"] || {}).recall_at_scaled_pass)}</td><td>${F.pct((by["Discard cloudy"] || {}).recall_at_scaled_pass)}</td>${cell(d.optical)}${cell(d.radar)}</tr>` });
+  $("#simhist").hidden = false;
+  $("#simhisttable").innerHTML = `<table><tr><th>run</th><th>selection</th><th>cloud seed</th><th>cloud</th><th>dial</th><th>pass</th><th>ORBIT-PRISM recall</th><th>optical-only</th><th>colour index</th><th>discard cloudy</th><th>optical missed</th><th>radar missed</th></tr>${ST.runs.map((x) => x.html).join("")}</table>`;
 }
 
 function playQueueAnimation(queue, budgetMB) {
   if (ST.simTimer) { clearInterval(ST.simTimer); ST.simTimer = null; }
-  const btn = $("#playQueueBtn");
-  const val = $("#budgetVal");
-  const pct = $("#budgetPct");
-  const fill = $("#budgetFill");
-  const status = $("#playStatus");
+  const btn = $("#playQueueBtn"), val = $("#budgetVal"), pct = $("#budgetPct"), status = $("#playStatus");
   const rows = document.querySelectorAll("#queueTableWrap table tr");
+  document.querySelectorAll("#passBars .fill").forEach((f) => (f.style.width = "0%"));
+  const step = Math.max(1, Math.ceil(queue.length / 150));
   let idx = 0;
-
-  btn.textContent = "⏸ Playing...";
-  status.textContent = "Transmitting packets in priority order...";
-
+  btn.textContent = "⏸ Playing…";
+  status.textContent = "";
   ST.simTimer = setInterval(() => {
     if (idx >= queue.length) {
-      clearInterval(ST.simTimer);
-      ST.simTimer = null;
-      btn.textContent = "↺ Replay sequence";
-      status.textContent = "Transmission complete for preview queue.";
+      clearInterval(ST.simTimer); ST.simTimer = null;
+      btn.textContent = "↺ Replay";
+      status.textContent = "Done.";
       return;
     }
-    const pkt = queue[idx];
-    const cumMB = pkt.cum_bytes / 1e6;
-    const ratio = Math.min(100, (cumMB / budgetMB) * 100);
-    fill.style.width = ratio.toFixed(1) + "%";
-    val.textContent = `${cumMB.toFixed(3)} / ${budgetMB.toFixed(2)} MB`;
-    pct.textContent = `${ratio.toFixed(1)}% of scaled pass`;
-
-    // Highlight row in table (idx + 1 because of header tr)
+    idx = Math.min(queue.length, idx + step);
+    const pkt = queue[idx - 1], inPass = pkt.in_pass_bytes / 1e6;
+    const bar = document.querySelector(`#passBars .pass-bar[data-p="${pkt.pass_index}"]`);
+    document.querySelectorAll("#passBars .pass-bar").forEach((b) => b.classList.toggle("now", b === bar));
+    if (bar) bar.querySelector(".fill").style.width = Math.min(100, (inPass / budgetMB) * 100).toFixed(1) + "%";
+    val.textContent = `pass ${pkt.pass_index + 1}: ${inPass.toFixed(3)} / ${budgetMB.toFixed(2)} MB`;
+    pct.textContent = `${(pkt.cum_bytes / 1e6).toFixed(3)} MB sent in total`;
     rows.forEach((r) => r.classList.remove("active-pkt"));
-    if (rows[idx + 1]) {
-      rows[idx + 1].classList.add("active-pkt");
-      rows[idx + 1].scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
-    idx++;
-  }, 120);
+    if (rows[idx]) { rows[idx].classList.add("active-pkt"); const w = $("#queueTableWrap"); w.scrollTop = rows[idx].offsetTop - w.clientHeight / 2; }
+  }, 90);
 }
 
 function queueTable(q) {
-  return `<table><tr><th>#</th><th>layer</th><th>tile</th><th>bytes</th><th>cumulative MB</th><th>pass</th></tr>` + q.map((p) =>
-    `<tr><td>${p.order}</td><td style="text-align:left"><span class="pill ${esc(p.layer)}">${esc(p.layer)}</span></td><td style="text-align:left">${esc(p.tile_id)}${p.critical ? " ★" : ""}</td><td>${p.bytes.toLocaleString()}</td><td>${(p.cum_bytes / 1e6).toFixed(3)}</td><td>${p.pass_index}</td></tr>`).join("") + `</table>`;
+  return `<table><tr><th>#</th><th>layer</th><th>tile</th><th>bytes</th><th>MB in this pass</th><th>MB in total</th><th>pass</th></tr>` + q.map((p) =>
+    `<tr><td>${p.order}</td><td style="text-align:left"><span class="pill ${esc(p.layer)}">${esc(p.layer)}</span></td><td style="text-align:left">${esc(p.tile_id)}${p.critical ? " ★" : ""}</td><td>${p.bytes.toLocaleString()}</td><td>${(p.in_pass_bytes / 1e6).toFixed(3)}</td><td>${(p.cum_bytes / 1e6).toFixed(3)}</td><td>${p.pass_index + 1}</td></tr>`).join("") + `</table>`;
 }
 
 /* ------------------------------------------------------------------ results */
@@ -313,29 +346,42 @@ async function loadResults() {
     const all = Number(d.threshold) === 0;
     return `<tr><td>${esc(d.path)}</td><td>${F.pct(d.target_miss_rate, 0)}</td><td>${F.n(d.threshold)}</td><td>${d.critical_tiles}</td><td>${d.missed}</td><td>${all ? "not met: keeps every tile" : F.pct(d.achieved_miss_rate)}</td></tr>`;
   }).join("") + `</table><p class="small muted">A 1% target needs at least 99 critical calibration tiles; with fewer, the cut-off is 0 and every tile is kept (nothing missed, nothing saved). A target is met only if test data resembles the calibration data; the achieved rate is whatever was measured.</p>` : "<p class='muted'>Not available yet.</p>") : `<div class="notice err">${esc(dial.error)}</div>`;
+  if (dial.measured && dial.measured.length) {
+    const lines = ["optical", "radar"].map((path) => {
+      const rows = dial.measured.filter((d) => d.path === path && Number(d.threshold) > 0);
+      const held = rows.every((d) => d.achieved_miss_rate <= d.target_miss_rate);
+      const text = rows.map((d) => `${F.pct(d.target_miss_rate, 0)} target: ${d.missed} of ${d.critical_tiles} missed (${F.pct(d.achieved_miss_rate)})`).join("; ");
+      return `<div class="${held ? "held" : "broke"}"><b>${path} path: ${held ? "held on this flood" : "did not hold on this flood"}</b>${text}.</div>`;
+    });
+    const n = dial.measured[0].critical_tiles;
+    $("#dialverdict").innerHTML = `<div class="verdict">${lines.join("")}</div><p class="small muted">With ${n} critical tiles per path, one tile moves the rate by ${F.pct(1 / n)}, so these are thin evidence either way. Bolivia is a different flood from the calibration floods, and the radar model's INT8 scores sit close together, so a small shift moves many tiles past the cut-off. Use the link simulator to see how the rates move under other clouds.</p>`;
+  }
   $("#memory").innerHTML = mem.rows && mem.rows.length ? `<table><tr><th>model</th><th>dtype</th><th>weights KB</th><th>peak activation KB (est.)</th><th>total KB</th><th>% of 4.2 MB</th><th>MACs</th><th>recall</th><th>ece</th><th>basis</th></tr>` + mem.rows.map((m) =>
     `<tr><td>${esc(m.model)}</td><td>${esc(m.dtype)}</td><td>${F.kb(m.weights_bytes)}</td><td>${F.kb(m.peak_activation_bytes)}</td><td>${F.kb(m.total_bytes)}</td><td>${F.pct(m.total_bytes / mem.sram_bytes)}</td><td>${Number(m.macs).toLocaleString()}</td><td>${esc(m.recall)}</td><td>${esc(m.ece)}</td><td>${esc(m.basis)}</td></tr>`).join("") + `</table><p class="small muted">Weights are measured; peak activation is estimated from the model graph. Recall and ECE are on the validation split at the float model's 90%-recall cut-off. Radar INT8 recall of 1 means that cut-off keeps almost every tile (INT8 radar scores are compressed upward), not a better model.</p>` : `<p class="muted">The memory table has not been produced yet (it comes from the INT8 step).</p>`;
   if (demo.available) renderDemoCase(demo);
-  else $("#democase").innerHTML = `<h3>A flood hidden under cloud</h3><div class="muted small">The demo tile is chosen from real scores once the evaluation has been run.</div>`;
+  else $("#democase").innerHTML = `<div class="muted small">The demo tile is chosen from real scores once the evaluation has been run.</div>`;
 }
 
 function renderDemoCase(d) {
   const del = d.full_tile_delivery || {}, cl = d.cloudy_critical_tiles_delivered || {};
-  const o = del["ORBIT-PRISM"];
-  const sent = (n) => (del[n] ? "sent as packet " + del[n].order + " after " + del[n].cum_MB.toFixed(2) + " MB" : "<b>not delivered</b> within the scaled pass");
+  const sent = (n) => (del[n] ? `sent after ${del[n].cum_MB.toFixed(2)} MB` : "not delivered in the pass");
+  const fig = (kind, title, note) => `<figure><img alt="${title}" src="${API.imageUrl(d.tile_id, kind, 4)}"><b>${title}</b>${note}</figure>`;
   $("#democase").innerHTML = `
-    <h3>A flood hidden under cloud · held-out ${esc(d.event)}</h3>
     <div class="imgs">
-      <figure><img alt="optical under simulated cloud" src="${API.imageUrl(d.tile_id, "optical", 2)}">optical, ${F.pct(d.cloud_frac, 0)} cloud</figure>
-      <figure><img alt="radar" src="${API.imageUrl(d.tile_id, "radar", 2)}">radar (sees through cloud)</figure>
-      <figure><img alt="hand label" src="${API.imageUrl(d.tile_id, "label", 2)}">hand label: ${F.pct(d.truth.water_frac, 0)} flood</figure>
+      ${fig("clear", "Infrared, clear day", "flood water is dark blue")}
+      ${fig("optical", "Camera under cloud", `${F.pct(d.cloud_frac, 0)} simulated cloud: flood hidden`)}
+      ${fig("radar", "Radar", "sees through cloud: smooth water is dark")}
+      ${fig("label", "Hand label (truth)", `${F.pct(d.truth.water_frac, 0)} flood in lime`)}
     </div>
-    <div class="facts">
-      <span>Routed to <b>${esc(d.routed_to)}</b> (cloud ≥ 50%). Radar score <b>${F.n(d.scores.p_radar, 2)}</b> against a ${Math.round(d.dial_target * 100)}% dial cut-off of <b>${F.n(d.thresholds.radar, 2)}</b>: ${d.kept_by_dial ? "kept" : "skipped"}.</span>
-      <span>ORBIT-PRISM: ${sent("ORBIT-PRISM")}. Discard cloudy: ${sent("Discard cloudy")}. Optical-only: ${sent("Optical-only triage")}.</span>
-      <span>Across all ${cl.total} critical cloudy tiles: ORBIT-PRISM delivers <b>${cl["ORBIT-PRISM"]}</b>, optical-only ${cl["Optical-only triage"]}, capture order ${cl["Capture order"]}, discard cloudy ${cl["Discard cloudy"]}.</span>
-      <span class="muted">${esc((d.caveats || []).join(" "))}</span>
-    </div>`;
+    <div class="flow">
+      <div><b>${F.pct(d.cloud_frac, 0)} cloud</b>≥ 50%, so routed to ${esc(d.routed_to)}</div>
+      <div><b>${F.n(d.scores.p_radar, 2)} vs ${F.n(d.thresholds.radar, 2)}</b>radar score against the ${Math.round(d.dial_target * 100)}% cut-off: ${d.kept_by_dial ? "kept" : "skipped"}</div>
+      <div><b>ORBIT-PRISM</b>${sent("ORBIT-PRISM")}</div>
+      <div><b>Discard cloudy</b>${sent("Discard cloudy")}</div>
+      <div><b>Optical-only</b>${sent("Optical-only triage")}</div>
+      <div><b>${cl["ORBIT-PRISM"]} of ${cl.total}</b>critical cloudy tiles delivered by ORBIT-PRISM; optical-only ${cl["Optical-only triage"]}, capture order ${cl["Capture order"]}, discard cloudy ${cl["Discard cloudy"]}</div>
+    </div>
+    <p class="small muted" style="margin-top:10px">${esc(d.tile_id)}. ${esc((d.caveats || []).join(" "))}</p>`;
 }
 
 init();

@@ -21,8 +21,10 @@ import functools
 import importlib.util
 import io
 import json
+import secrets
 import struct
 import sys
+import threading
 import zlib
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -43,6 +45,7 @@ from src.evaluation import metrics  # noqa: E402
 from src.evaluation.reference_policies import NotAvailable  # noqa: E402
 from src.scheduler import sim as scheduler_sim  # noqa: E402 (the scheduler of record: policies, packets, passes)
 from src.scheduler.sim import POLICIES  # noqa: E402
+from app import tile_views  # noqa: E402
 
 DIAL_TARGETS = [0.01, 0.05, 0.10]
 SYSTEM_NAMES = {
@@ -51,6 +54,9 @@ SYSTEM_NAMES = {
     "orbit_no_radar": "No radar (ablation)", "orbit_no_dial": "No dial (ablation)",
 }
 MAX_UPLOAD = 2_000_000
+MAX_REDRAW_TILES = 1500
+MAX_QUEUE_ROWS = 600
+PREDICT_LOCK = threading.Lock()   # one TFLite interpreter is shared by the request threads
 
 
 def _clean(obj):
@@ -210,12 +216,14 @@ class TriageIn(BaseModel):
 
 
 class SimulateIn(BaseModel):
-    split: str = "holdout"
+    split: Optional[str] = None     # with no split, event or chip: the held-out split
     event: Optional[str] = None
     chip: Optional[str] = None
     alpha: float = 0.05
     scaled_fraction: float = Field(SCALED_PASS_FRACTION, gt=0, le=1)
     policies: List[str] = ["orbit_prism", "capture_order", "discard_cloudy", "optical_only", "colour_index"]
+    redraw_clouds: bool = False     # simulate new clouds and re-run the optical model on the new pixels
+    cloud_seed: Optional[int] = None  # with redraw_clouds; a new seed is drawn when omitted. 42 = the headline clouds
 
 
 def create_app(root: Path = ROOT) -> FastAPI:
@@ -247,7 +255,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
         thr = S.thresholds(alpha)[sensor]
         live = {}
         for name, tile in (("optical", optical), ("radar", radar)):
-            out = S.models.predict(name, tile) if tile is not None else None
+            with PREDICT_LOCK:
+                out = S.models.predict(name, tile) if tile is not None else None
             if out:
                 live[name] = {"p_flood": out[0], "extent": out[1], "model": out[2]}
         used = live.get(sensor)
@@ -340,13 +349,15 @@ def create_app(root: Path = ROOT) -> FastAPI:
                 "note": "Peak activation is ESTIMATED; weights are measured. recall and ece are on the valid split."}
 
     @app.get("/api/chips")
-    def chips(split: str = "holdout", event: Optional[str] = None):
+    def chips(split: Optional[str] = None, event: Optional[str] = None):
         need_data()
-        t = S.tiles[S.tiles["split"] == split]
+        t = S.tiles
+        if split or not event:
+            t = t[t["split"] == (split or "holdout")]
         if event:
             t = t[t["event"] == event]
-        g = t.groupby(["event", "chip"]).agg(tiles=("tile_id", "size"), critical=("critical", "sum"),
-                                              mean_cloud=("cloud_frac", "mean")).reset_index()
+        g = t.groupby(["event", "chip", "split"]).agg(tiles=("tile_id", "size"), critical=("critical", "sum"),
+                                                       mean_cloud=("cloud_frac", "mean")).reset_index()
         return {"synthetic": S.synthetic, "chips": _frame(g)}
 
     @app.get("/api/tiles")
@@ -365,9 +376,16 @@ def create_app(root: Path = ROOT) -> FastAPI:
         return {"synthetic": S.synthetic, "chip": chip, "tiles": _clean(out)}
 
     @app.get("/api/tile/{tile_id}/image")
-    def tile_image(tile_id: str, kind: str = Query("optical", pattern="^(optical|radar|label)$"),
-                   scale: int = Query(2, ge=1, le=6)):
+    def tile_image(tile_id: str, kind: str = Query("optical", pattern="^(optical|clear|radar|label)$"),
+                   scale: int = Query(2, ge=1, le=6)):   # (the page adds &v= only to refresh browser caches)
         row = row_of(tile_id)
+        view = tile_views.tile_view(root, row["chip"], int(row["row"]), int(row["col"]), kind, scale)
+        if view is not None:
+            buf = io.BytesIO()
+            view.save(buf, format="PNG")
+            return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "max-age=300"})
+        if kind == "clear":
+            raise HTTPException(404, "raw imagery not on disk: python scripts/download_flood.py --imagery")
         if kind == "label":
             return _label_png(root, row, scale)
         arrays = tile_arrays(row)
@@ -414,15 +432,31 @@ def create_app(root: Path = ROOT) -> FastAPI:
     @app.post("/api/simulate")
     def simulate(body: SimulateIn):
         need_data()
-        sel = S.tiles[S.tiles["split"] == body.split]
+        sel = S.tiles
+        if body.split or not (body.event or body.chip):
+            sel = sel[sel["split"] == (body.split or "holdout")]
         if body.event:
             sel = sel[sel["event"] == body.event]
         if body.chip:
             sel = sel[sel["chip"] == body.chip]
         if sel.empty:
             raise HTTPException(404, "no tiles match that selection")
+        seed = tile_views.HEADLINE_CLOUD_SEED
+        if body.redraw_clouds:
+            if S.synthetic:
+                raise HTTPException(409, "new clouds need the real models, not placeholder scores")
+            if len(sel) > MAX_REDRAW_TILES:
+                raise HTTPException(422, f"choose one event or chip for new clouds (at most {MAX_REDRAW_TILES} tiles)")
+            seed = body.cloud_seed if body.cloud_seed is not None else secrets.randbelow(1_000_000)
+            ndwi = _load_script("ndwi_baseline").ndwi_water_share
+            try:
+                with PREDICT_LOCK:
+                    sel = tile_views.redraw_clouds(root, sel, seed, lambda t: S.models.predict("optical", t), ndwi)
+            except FileNotFoundError as e:
+                raise HTTPException(409, str(e))
         thr = S.thresholds(body.alpha)
-        budget = body.scaled_fraction * len(sel) * OPTICAL_B
+        # never below one full tile: a tile is not split across passes, so a smaller pass could carry nothing whole
+        budget = max(body.scaled_fraction * len(sel) * OPTICAL_B, OPTICAL_B)
         sel = sel.reset_index(drop=True)
         out, skipped = {}, {}
         for pol in body.policies:
@@ -435,8 +469,11 @@ def create_app(root: Path = ROOT) -> FastAPI:
                 continue
             curve = metrics.recall_curve(log, sel)
             keep = np.unique(np.linspace(0, len(curve) - 1, min(len(curve), 300)).astype(int))
-            # the queue is long, so show the first packets of EACH layer (alerts, then previews, then tiles)
-            sample = pd.concat([log[log["layer"] == layer].head(15) for layer in ("L0", "L1", "L2")])
+            log = log.copy()
+            log["bytes"] = pd.to_numeric(log["bytes"])     # an empty log comes back with object columns
+            log["in_pass_bytes"] = log.groupby("pass_index")["bytes"].cumsum()
+            # a long queue is sampled: the first packets of EACH layer (alerts, then previews, then tiles)
+            sample = log if len(log) <= MAX_QUEUE_ROWS else pd.concat([log[log["layer"] == layer].head(60) for layer in ("L0", "L1", "L2")])
             first = sample.merge(sel[["chip", "row", "col", "cloud_frac", "critical"]], on=["chip", "row", "col"], how="left")
             first["tile_id"] = first["chip"] + "_" + first["row"].astype(str) + "_" + first["col"].astype(str)
             summ = metrics.summarise(SYSTEM_NAMES[pol], log, sel, budget)
@@ -444,12 +481,19 @@ def create_app(root: Path = ROOT) -> FastAPI:
                 "summary": summ, "total_packets": len(log),
                 "curve": [{"cum_MB": float(c) / 1e6, "recall": float(r)} for c, r in
                           zip(curve["cum_bytes"].iloc[keep], curve["recall"].iloc[keep])],
-                "queue_preview": first[["order", "layer", "tile_id", "bytes", "cum_bytes", "pass_index", "critical"]].to_dict("records"),
+                "queue_preview": first[["order", "layer", "tile_id", "bytes", "cum_bytes", "in_pass_bytes", "pass_index", "critical"]].to_dict("records"),
+                "passes": [{"pass_index": int(k), "MB": float(g["bytes"].sum()) / 1e6, "packets": int(len(g))}
+                           for k, g in log.groupby("pass_index")],
             }
         return _clean({"synthetic": S.synthetic, "selection": {"split": body.split, "event": body.event, "chip": body.chip,
                                                                "tiles": len(sel), "critical": int(sel["critical"].sum())},
                        "alpha": body.alpha, "thresholds": thr, "scaled_budget_MB": budget / 1e6,
-                       "scaled_note": "scaled pass = 20% of the selection's all-optical volume, not the real 19.2 MB pass",
+                       "scaled_fraction": body.scaled_fraction,
+                       "weather": {"cloud_seed": seed, "redrawn": body.redraw_clouds,
+                                   "mean_cloud": float(sel["cloud_frac"].mean()),
+                                   "radar_routed": int((sel["sensor_used"] == "radar").sum())},
+                       "dial": [_dial_row(sel, path, thr[path], body.alpha) for path in ("optical", "radar")],
+                       "scaled_note": f"scaled pass = {body.scaled_fraction:.0%} of the selection's all-optical volume, not the real 19.2 MB pass",
                        "systems": out, "skipped": skipped})
 
     @app.get("/api/demo-case")
@@ -464,6 +508,13 @@ def create_app(root: Path = ROOT) -> FastAPI:
         app.mount("/", StaticFiles(directory=str(web), html=True), name="web")
     app.state.S = S
     return app
+
+
+def _dial_row(sel: pd.DataFrame, path: str, threshold: float, alpha: float) -> dict:
+    crit = sel[(sel["sensor_used"] == path) & (sel["critical"] == 1)]
+    missed = int((crit["p_flood"] < threshold).sum())
+    return {"path": path, "target": alpha, "threshold": threshold, "critical": len(crit), "missed": missed,
+            "achieved": missed / len(crit) if len(crit) else None}
 
 
 def _label_png(root: Path, row: pd.Series, scale: int) -> Response:

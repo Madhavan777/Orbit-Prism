@@ -18,7 +18,7 @@ const API = (() => {
     dial: () => get("/dial"),
     memory: () => get("/memory"),
     demoCase: () => get("/demo-case"),
-    chips: (split, event) => get("/chips" + qs({ split, event })),
+    chips: (event, split) => get("/chips" + qs({ split, event })),
     tiles: (chip) => get("/tiles" + qs({ chip })),
     triage: (tile_id, alpha) => post("/triage", { tile_id, alpha }),
     simulate: (body) => post("/simulate", body),
@@ -26,6 +26,6 @@ const API = (() => {
       const f = new FormData(); f.append("file", file); f.append("cloud_frac", cloud_frac); f.append("alpha", alpha);
       return fetch("/api/triage/upload", { method: "POST", body: f }).then(parse);
     },
-    imageUrl: (tile_id, kind = "optical", scale = 2) => `/api/tile/${encodeURIComponent(tile_id)}/image?kind=${kind}&scale=${scale}`,
+    imageUrl: (tile_id, kind = "optical", scale = 2) => `/api/tile/${encodeURIComponent(tile_id)}/image?kind=${kind}&scale=${scale}&v=3`,
   };
 })();

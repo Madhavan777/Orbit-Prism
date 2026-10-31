@@ -1,8 +1,8 @@
 {
-  "tile_id": "Bolivia_314919_1_1",
+  "tile_id": "Bolivia_242570_0_1",
   "event": "Bolivia",
-  "chip": "Bolivia_314919",
-  "row": 1,
+  "chip": "Bolivia_242570",
+  "row": 0,
   "col": 1,
   "split": "holdout",
   "dial_target": 0.05,
@@ -11,26 +11,26 @@
     "radar": 0.140625
   },
   "truth": {
-    "water_frac": 0.7721,
+    "water_frac": 0.3884,
     "critical": true
   },
-  "cloud_frac": 0.8721,
+  "cloud_frac": 0.8575,
   "routed_to": "radar",
   "scores": {
-    "p_optical": 0.1133,
-    "p_radar": 0.2773,
-    "extent_radar": 0.3359
+    "p_optical": 0.1055,
+    "p_radar": 0.1602,
+    "extent_radar": 0.0977
   },
   "kept_by_dial": true,
-  "alert_hex": "01000004ce27010100004700560017da00000000000000010000000000000951",
+  "alert_hex": "01000003b38a0001000029001900040100000000000000010000000000007789",
   "scaled_budget_MB": 3.028,
   "full_tile_delivery": {
     "Capture order": null,
     "Discard cloudy": null,
     "Optical-only triage": null,
     "ORBIT-PRISM": {
-      "order": 175,
-      "cum_MB": 1.18
+      "order": 204,
+      "cum_MB": 2.458
     }
   },
   "cloudy_critical_tiles_delivered": {
@@ -46,5 +46,5 @@
     "Clouds are simulated.",
     "Scaled pass, not the real 19.2 MB pass."
   ],
-  "n_candidates": 5
+  "n_candidates": 2
 }

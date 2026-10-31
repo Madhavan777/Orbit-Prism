@@ -9,34 +9,62 @@
 </head>
 <body>
 
+<div id="mount3d" aria-hidden="true"></div>
+<div id="spaceVignette" aria-hidden="true"></div>
+<div id="scrollRibbon" aria-hidden="true"></div>
 <div id="banner" role="status"></div>
 
 <nav aria-label="Sections">
   <div class="wrap">
     <a class="brand" href="#top"><i aria-hidden="true"></i>ORBIT<span>-PRISM</span></a>
     <div class="nav-links">
-      <a href="#problem">Problem and solution</a>
+      <a href="#problem">Problem</a>
+      <a href="#how">How it works</a>
       <a href="#try">Live demo</a>
+      <a href="#sensors">Optical + radar</a>
       <a href="#link">Link simulator</a>
       <a href="#results">Results</a>
     </div>
-    <span class="pill" id="pill">connecting</span>
+    <div class="nav-actions">
+      <button class="hud-btn" type="button" onclick="window.replayIntro &amp;&amp; window.replayIntro()">Replay intro</button>
+      <button class="hud-btn" id="drag3dBtn" type="button" onclick="window.toggle3DDragMode &amp;&amp; window.toggle3DDragMode()">3D drag</button>
+      <span class="pill" id="pill">connecting</span>
+    </div>
   </div>
 </nav>
 
+<aside class="mission-rail" aria-label="Sections">
+  <a class="rail-dot active" href="#top" title="Mission"></a>
+  <a class="rail-dot" href="#problem" title="The problem"></a>
+  <a class="rail-dot" href="#how" title="How it works"></a>
+  <a class="rail-dot" href="#try" title="Live demo"></a>
+  <a class="rail-dot" href="#sensors" title="Optical and radar"></a>
+  <a class="rail-dot" href="#link" title="Link simulator"></a>
+  <a class="rail-dot" href="#results" title="Results"></a>
+  <a class="rail-dot" href="#end" title="Scope"></a>
+</aside>
+
+<div class="bottom-hud">
+  <div class="hud-pill"><span class="live-dot"></span><span>STAGE <b id="hudStage">01 MISSION</b></span>
+    <span class="hud-sep">OBSERVING <b id="hudTarget">Bolivia</b></span>
+    <span id="introBanner" class="intro-banner"><b id="introStepText">INTRO</b>
+      <button type="button" onclick="window.skipIntro &amp;&amp; window.skipIntro()">SKIP</button></span>
+  </div>
+</div>
+
+<div class="content-layer">
+
 <header class="hero" id="top">
   <div class="wrap">
-    <div class="hero-grid">
-      <div>
-        <div class="eyebrow">Conscientia 2k26 · PS 1.4 · Kepler Aerospace</div>
-        <h1>Decide what a satellite <em>sends first.</em></h1>
-        <p class="tag">A TinyML triage layer for a constrained downlink. You set the miss rate. We minimise the bytes, even through cloud.</p>
-        <div class="cta">
-          <a class="btn" href="#try">Run the live demo</a>
-          <a class="btn ghost" href="#results">See measured results</a>
-        </div>
+    <div class="hero-copy">
+      <div class="eyebrow">Conscientia 2k26 · PS 1.4 · Kepler Aerospace</div>
+      <h1>Decide what a satellite <em>sends first.</em></h1>
+      <p class="tagline">Detect the flood. Prioritize the data. Transmit what matters.</p>
+      <p class="tag">A TinyML triage layer for a constrained downlink. You set the miss rate. We minimise the bytes, even through cloud.</p>
+      <div class="cta">
+        <a class="btn" href="#try">Run the live demo</a>
+        <a class="btn ghost" href="#results">See measured results</a>
       </div>
-      <div class="proof" id="democase"><h3>A flood hidden under cloud</h3><div class="muted small">Loading the held-out demo tile…</div></div>
     </div>
     <div class="stats" id="stats"></div>
   </div>
@@ -45,30 +73,31 @@
 <main>
 
 <section id="problem">
-  <div class="wrap">
-    <div class="eyebrow">The problem and our answer</div>
+  <div class="wrap narrow-center">
+    <div class="eyebrow">The problem</div>
     <h2>A satellite sees far more than it can send.</h2>
-    <div class="two">
-      <div class="panel">
-        <h3>Problem statement</h3>
-        <p>An Earth-observation satellite captures gigabytes of imagery, but a ten-minute ground-station pass over a 256 kbit/s link carries only 19.2 MB, and the chip that thinks has just 4.2 MB of working memory.</p>
-        <p>Much of that link is wasted on cloudy frames, empty frames, and urgent tiles that wait for the next pass. The task: decide, on board and within those limits, <b>what to send first</b>, and say honestly how many important events might be missed.</p>
-        <ul>
-          <li><b>Link:</b> 256 kbit/s × 600 s = 19.2 MB per pass</li>
-          <li><b>Memory:</b> 4.2 MB, so a full 6.8 MB chip must be cut into tiles</li>
-          <li><b>Worked example:</b> floods, using real Sentinel-1 radar and Sentinel-2 optical imagery</li>
-        </ul>
-      </div>
-      <div class="panel sol">
-        <h3>Our solution: ORBIT-PRISM</h3>
-        <p>Cut each image into 16 tiles, score every tile with a tiny INT8 network, and send in order of value per byte, in three layers: a 32-byte alert, a 2 KiB preview, then the full tile.</p>
-        <ul>
-          <li><b>Miss-rate dial.</b> The operator picks the share of critical tiles they accept missing (1%, 5% or 10%); a calibrated cut-off per sensor delivers it, and we report what was actually achieved on a flood the models never saw.</li>
-          <li><b>Radar fallback.</b> When cloud covers half a tile or more, the radar model takes over, because radar sees through cloud. A cloud filter alone would discard the flood.</li>
-          <li><b>Byte-budget scheduler.</b> Tiles are ranked by flood probability × extent per byte until the pass is spent; the rest carry over.</li>
-        </ul>
-      </div>
+    <div class="glass">
+      <p>An Earth-observation satellite captures gigabytes of imagery, but a ten-minute ground-station pass over a 256 kbit/s link carries only <b>19.2 MB</b>, and the chip that thinks has just <b>4.2 MB</b> of working memory. Much of that link is wasted on cloudy frames, empty frames, and urgent tiles that wait for the next pass.</p>
+      <p>The task: decide, on board and within those limits, <b>what to send first</b>, and say honestly how many important events might be missed.</p>
     </div>
+    <div class="glass sol">
+      <h3>Our solution: ORBIT-PRISM</h3>
+      <p>Cut each image into 16 tiles, score every tile with a tiny INT8 network, and send in order of value per byte, in three layers: a 32-byte alert, a 2 KiB preview, then the full tile.</p>
+      <ul>
+        <li><b>Miss-rate dial.</b> The operator picks the share of critical tiles they accept missing; a cut-off calibrated per sensor aims for it, and we report what was actually achieved on a flood the models never saw.</li>
+        <li><b>Radar fallback.</b> When cloud covers half a tile or more, the radar model takes over, because radar sees through cloud. A cloud filter alone would discard the flood.</li>
+        <li><b>Byte-budget scheduler.</b> Tiles are ranked by flood probability × extent per byte until the pass is spent; the rest carry over.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap side-right">
+    <div class="eyebrow">How it works</div>
+    <h2>One tile's path, on board to ground.</h2>
+    <p class="lead">Steps light up with real values when a tile is selected in the live demo.</p>
+    <ol class="steps" id="steps"></ol>
   </div>
 </section>
 
@@ -76,40 +105,34 @@
   <div class="wrap">
     <div class="eyebrow">Live demo</div>
     <h2>One real tile through the real models.</h2>
-    <p class="lead">Pick a tile from the held-out Bolivia flood. The page runs the actual models on its pixels, routes it by cloud cover, applies the miss-rate dial and builds the 32-byte alert. Clouds are simulated; the flood labels are real hand labels.</p>
+    <p class="lead">Pick any of the 11 flood events. The page runs the actual INT8 models on the tile's pixels, routes it by cloud cover, applies the miss-rate dial and builds the 32-byte alert. Clouds are simulated; the flood labels are real hand labels.</p>
 
     <div class="controls-bar">
       <div class="field"><span>MISS-RATE DIAL</span><div class="seg" id="dial" role="group" aria-label="Target miss rate"></div></div>
-      <div class="field"><span>EVENT SPLIT</span>
-        <select id="split">
-          <option value="holdout">holdout (Bolivia, unseen)</option>
-          <option value="test">test</option>
-          <option value="valid">valid</option>
-          <option value="train">train</option>
-        </select></div>
-      <div class="field"><span>CHIP</span><select id="chip"></select></div>
+      <div class="field"><span>FLOOD EVENT</span><select id="event"></select></div>
+      <div class="field grow"><span>CHIP</span><select id="chip"></select></div>
+      <div class="field"><span>SHOW THE CHIP AS</span><div class="seg" id="gridview" role="group" aria-label="Picture shown in the grid">
+        <button type="button" data-v="optical" aria-pressed="true">Under cloud</button><button type="button" data-v="clear" aria-pressed="false">Infrared</button><button type="button" data-v="radar" aria-pressed="false">Radar</button><button type="button" data-v="label" aria-pressed="false">Flood label</button></div></div>
     </div>
+    <div id="eventnote" class="small muted notes"></div>
     <div id="dialnote" class="notice" hidden></div>
 
     <div class="try-layout">
       <div class="grid-panel">
         <div id="grid-counts"></div>
         <div id="grid" role="grid" aria-label="4 by 4 grid of tiles"></div>
-        <div class="legend-line"><span>green frame = kept</span><span>faded = skipped</span><span>O optical · R radar</span><span>★ critical (≥ 30% flood)</span></div>
+        <div class="legend-line"><span><i class="k"></i>kept</span><span><i class="s"></i>skipped</span><span>O optical · R radar</span><span>★ critical (≥ 30% flood)</span></div>
       </div>
       <div id="detail"><div class="muted small">Select a tile to see the model scores, sensor routing and the 32-byte alert packet.</div></div>
     </div>
 
-    <h3 class="sub">What happened to this tile</h3>
-    <ol class="steps" id="steps"></ol>
-
     <details class="more">
-      <summary>Triage your own tile (optional)</summary>
-      <p class="small muted">Upload a .npz with <code>optical</code> (128×128×4, uint8, bands B2 B3 B4 B8) and/or <code>radar</code> (128×128×2, uint8, VV VH). Set its cloud fraction: at 50% or more it is routed to radar.</p>
-      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+      <summary>Triage your own tile</summary>
+      <p class="small muted">Upload a .npz with <code>optical</code> (128×128×4, uint8, bands B2 B3 B4 B8) and/or <code>radar</code> (128×128×2, uint8, VV VH). At a cloud fraction of 50% or more it is routed to radar.</p>
+      <div class="upload-row">
         <input type="file" id="upfile" accept=".npz">
-        <label class="field" style="flex-direction:row;align-items:center;gap:8px">cloud fraction
-          <input type="range" id="upcloud" min="0" max="1" step="0.05" value="0.2"> <b id="upcloudv" style="color:var(--lime)">20%</b></label>
+        <label class="field row">cloud fraction
+          <input type="range" id="upcloud" min="0" max="1" step="0.05" value="0.2"> <b id="upcloudv">20%</b></label>
         <button class="btn ghost" id="upgo" type="button">Run triage</button>
       </div>
       <div id="upout"></div>
@@ -117,24 +140,39 @@
   </div>
 </section>
 
+<section id="sensors">
+  <div class="wrap">
+    <div class="eyebrow">Optical and radar</div>
+    <h2>A flood the camera cannot see.</h2>
+    <p class="lead">The same ground, four ways. Infrared shows the flood on a clear day. Under cloud the camera is blind and the tile goes to the radar model, where smooth water returns little signal and shows dark. The hand label is the truth.</p>
+    <div class="glass" id="democase"><div class="muted small">Loading the demo tile…</div></div>
+  </div>
+</section>
+
 <section id="link">
   <div class="wrap">
     <div class="eyebrow">Link simulator</div>
-    <h2>Five systems, one byte budget.</h2>
-    <p class="lead">Each system sends tiles in its own order over the same link. The chart shows how fast each one delivers the critical tiles. The vertical line is the scaled pass (20% of the selection's data), not the real 19.2 MB pass.</p>
+    <h2>Five systems, one byte budget, new weather every run.</h2>
+    <p class="lead">Each run draws new simulated clouds over the chosen event and re-runs the optical model on the new pixels, so routing, scores and recall all change, as they would on a different day. The flood and its labels stay real. Seed 42 reproduces the measured result below. The line on the chart is the scaled pass, not the real 19.2 MB pass.</p>
     <div class="controls-bar">
-      <div class="field"><span>SCOPE (uses the split, chip and dial chosen above)</span>
-        <select id="scope"><option value="split">whole split</option><option value="chip">selected chip</option></select></div>
-      <button class="btn" id="simgo" type="button">Run the simulation</button>
+      <div class="field"><span>SCOPE</span><select id="scope"><option value="event">selected event</option><option value="chip">selected chip</option></select></div>
+      <div class="field grow"><span>PASS BUDGET: <b id="budgetLabel">20%</b> OF THE SELECTION'S DATA</span>
+        <input type="range" id="budget" min="0.05" max="1" step="0.05" value="0.2" aria-label="Pass budget as a share of the selection's data"></div>
+      <button class="btn" id="simnew" type="button">Run with new clouds</button>
+      <button class="btn ghost" id="simgo" type="button">Measured clouds (seed 42)</button>
     </div>
-    <div id="simout"><p class="muted small">Press “Run the simulation”.</p></div>
+    <div id="simout"><p class="muted small glass">Press “Run with new clouds”. The event, chip and dial come from the live demo above.</p></div>
+    <div id="simhist" hidden class="card">
+      <h3 class="sub first">Runs so far</h3>
+      <div class="tablewrap" id="simhisttable"></div>
+    </div>
   </div>
 </section>
 
 <section id="results">
   <div class="wrap">
     <div class="eyebrow">Measured results</div>
-    <h2>Held-out event: Bolivia.</h2>
+    <h2>The held-out flood: Bolivia.</h2>
     <p class="lead" id="resnote">Loading results…</p>
     <div class="card chart" id="chart"></div>
 
@@ -142,23 +180,39 @@
     <div class="card"><div class="tablewrap" id="summary"></div></div>
 
     <h3 class="sub">Does the dial keep its promise?</h3>
-    <div class="card"><div class="tablewrap" id="dialtable"></div></div>
+    <div class="card"><div id="dialverdict"></div><div class="tablewrap" id="dialtable"></div></div>
 
-    <h3 class="sub">Fits in 4.2 MB?</h3>
+    <h3 class="sub">Does it fit in 4.2 MB?</h3>
     <div class="card"><div class="tablewrap" id="memory"></div></div>
+  </div>
+</section>
 
-    <div class="limits"><b>Scope and limits.</b> A simulation of the link and memory limits, not flight hardware. Clouds are simulated (the dataset has no cloud mask). One held-out flood is thin evidence. The miss-rate promise holds only when test data resembles the calibration data. Floods are the worked example; forest-fire data is not loaded. Imagery: contains modified Copernicus Sentinel data; dataset Sen1Floods11 (Bonafilia et al., 2020), licence unconfirmed.</div>
+<section id="end">
+  <div class="wrap narrow-center">
+    <div class="glass limits"><b>Scope and limits.</b> A simulation of the link and memory limits, not flight hardware. Clouds are simulated (the dataset has no cloud mask). One held-out flood is thin evidence. The miss-rate promise holds only when test data resembles the calibration data. Floods are the worked example; forest-fire data is not loaded. Imagery: contains modified Copernicus Sentinel data; dataset Sen1Floods11 (Bonafilia et al., 2020), licence unconfirmed. Earth maps are for illustration; only the marker position and the chip grid carry real data.</div>
   </div>
 </section>
 
 </main>
 
 <footer>
-  <div class="wrap">ORBIT-PRISM · Conscientia 2k26 · PS 1.4 · everything on this page is served from this machine, no external requests.</div>
+  <div class="wrap">
+    <span><b>ORBIT-PRISM</b> · Conscientia 2k26 · PS 1.4 · runs entirely from this machine</span>
+    <a class="hud-btn" href="#top">Back to top</a>
+  </div>
 </footer>
 
+</div>
+
+<script src="js/vendor/three.min.js"></script>
+<script src="js/three-scene.js"></script>
 <script src="js/api.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    if (window.initOrbital3D) window.initOrbital3D(document.getElementById('mount3d'));
+  });
+</script>
 </body>
 </html>
