@@ -1,4 +1,6 @@
 data/raw/
+data/processed/
+*.npz
 *.tif
 *.tiff
 __pycache__/
