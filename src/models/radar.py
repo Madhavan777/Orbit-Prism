@@ -1,18 +1,32 @@
-"""Radar flood detection CNN model for ORBIT-PRISM.
+"""Sentinel-1 C-band SAR Radar Flood Detection CNN Model for ORBIT-PRISM.
 
 Author: Harish D
 Branch: harish/radar-compress
 
-Architecture:
-- Input: (128, 128, 2) uint8 normalized to [0, 1] (VV, VH channels)
-- TinyML CNN with 4 Conv stages, BatchNormalization, ReLU, and GlobalAveragePooling
-- Dual heads:
+Satellite Sensor & Polarization Technology:
+- Sensor: Sentinel-1 C-band Synthetic Aperture Radar (SAR)
+- Dataset: Sen1Floods11 — S1Hand (Flood event hand-labeled SAR)
+- Active Project Scopes: Flood Detection and Forest-Fire SAR observations.
+- Excluded Datasets: Cyclone datasets are permanently excluded from active scope.
+- Polarimetric Radar Bands:
+    Channel 1 (Index 0): VV (Vertical Transmit, Vertical Receive)
+    Channel 2 (Index 1): VH (Vertical Transmit, Horizontal Receive)
+- Physical SAR Principle:
+    Specular reflection off smooth flood water directs C-band radar pulses away
+    from the SAR antenna, producing characteristic low-backscatter (dark) pixels
+    in both VV and VH channels. Rough terrain and vegetation produce strong diffuse
+    or volume backscatter.
+- Input Shape: (128, 128, 2) uint8 normalized to [0, 1] float32.
+- Ground-Side Tool: ESA SNAP (Sentinel Application Platform) with Sentinel-1 Toolbox
+    for raw GRD orbit correction, calibration, speckle filtering, and terrain correction.
+    Note: Sen1Floods11 S1Hand data is already radiometrically calibrated and orthorectified.
+- Dual Heads:
     1) p_flood: Sigmoid, Binary Cross-Entropy (critical tile classification >= 0.30 water)
     2) extent: Sigmoid, Mean Squared Error (continuous water fraction estimate)
 - Designed for full-integer INT8 quantization under 4.2 MB SRAM constraint.
 
 Design Rules:
-- Real training requires Agnel's processed radar dataset (TRAIN split only).
+- Real training requires Agnel's processed Sentinel-1 SAR dataset (TRAIN split only).
 - Never tune or train on CAL (valid) or TEST (holdout) data.
 - Synthetic tensors are strictly for unit testing and code verification.
 """
@@ -178,9 +192,45 @@ def test_radar_model_independent(batch_size: int = 4) -> Dict[str, any]:
     }
 
 
+def check_esa_snap_installed() -> Dict[str, any]:
+    """Check whether ESA SNAP (Sentinel Application Platform) is installed on the system.
+
+    Checks:
+    - gpt command in PATH (SNAP Graph Processing Tool)
+    - Default installation paths (e.g. C:\\Program Files\\snap\\bin\\gpt.exe)
+    """
+    import shutil
+    gpt_path = shutil.which("gpt")
+    if gpt_path:
+        return {"installed": True, "path": gpt_path, "source": "PATH"}
+
+    standard_paths = [
+        Path(r"C:\Program Files\snap\bin\gpt.exe"),
+        Path(r"C:\Program Files (x86)\snap\bin\gpt.exe"),
+        Path.home() / "snap" / "bin" / "gpt.exe",
+    ]
+    for sp in standard_paths:
+        if sp.exists():
+            return {"installed": True, "path": str(sp), "source": "Standard Directory"}
+
+    return {
+        "installed": False,
+        "path": None,
+        "download_url": "https://step.esa.int/main/download/snap-download/",
+        "required_toolbox": "Sentinel-1 Microwave Toolbox (S1TBX)",
+        "notes": (
+            "ESA SNAP is required for ground-side raw Sentinel-1 GRD SAR ingestion. "
+            "Sen1Floods11 S1Hand data is already radiometrically calibrated and orthorectified, "
+            "so SNAP is optional when using preprocessed S1Hand GeoTIFFs."
+        ),
+    }
+
+
 def discover_agnel_radar_dataset() -> Optional[Path]:
-    """Discover real processed radar dataset provided by Agnel in data/."""
+    """Discover real processed Sentinel-1 SAR radar dataset provided by Agnel in data/."""
     candidates = [
+        DATA_DIR / "processed" / "flood" / "s1_radar_tiles.npz",
+        DATA_DIR / "processed" / "flood" / "radar_tiles.npz",
         DATA_DIR / "radar_tiles.npz",
         DATA_DIR / "processed" / "radar_tiles.npz",
         DATA_DIR / "agnel_radar.npz",

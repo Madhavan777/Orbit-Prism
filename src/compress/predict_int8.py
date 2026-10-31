@@ -292,3 +292,4 @@ def test_int8_inference_independent() -> Dict[str, any]:
 
 if __name__ == "__main__":
     test_int8_inference_independent()
+

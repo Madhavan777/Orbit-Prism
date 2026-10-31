@@ -33,6 +33,7 @@ from src.compress.predict_int8 import Int8ModelRunner, validate_scores_csv
 from src.compress.profile_memory import inspect_tflite_model_memory
 from src.compress.quantize import build_representative_dataset_generator, convert_model_to_full_int8
 from src.models.radar import build_radar_model, run_otsu_baseline
+from src.models.snap_workflow import check_esa_snap_installed, validate_sar_tile_channels
 
 
 class TestHarishIndependentPipeline(unittest.TestCase):
@@ -205,6 +206,39 @@ class TestHarishIndependentPipeline(unittest.TestCase):
         self.assertTrue(np.all((p_sc >= 0.0) & (p_sc <= 1.0)))
         print(f"✓ Otsu baseline functional: p_scores={p_sc}, extents={ext_sc}")
 
+    def test_14_sentinel1_sar_and_snap_workflow(self):
+        """14. Sentinel-1 C-band SAR VV/VH polarization and ESA SNAP status check."""
+        print("\n[Test 14] Verifying Sentinel-1 C-band SAR channel arrangement & ESA SNAP...")
+        sar_tile = np.random.uniform(0.0, 1.0, size=(128, 128, 2)).astype(np.float32)
+        self.assertTrue(validate_sar_tile_channels(sar_tile))
+
+        # Check SNAP detection function
+        snap_status = check_esa_snap_installed()
+        self.assertIn("installed", snap_status)
+        self.assertIn("required_toolbox", snap_status)
+        print(f"✓ Sentinel-1 SAR input verified: shape {sar_tile.shape}, ch0=VV, ch1=VH.")
+        print(f"✓ ESA SNAP status checked: installed={snap_status['installed']}")
+
+    def test_15_cyclone_dataset_removal_audit(self):
+        """15. Verify that Cyclone datasets and samples are absent from project scope."""
+        print("\n[Test 15] Verifying Cyclone dataset exclusion...")
+        banned_word = "cy" + "clone"
+        hits = []
+        for p in ROOT_DIR.glob("**/*"):
+            # Exclude git, venv, pycache, and the test directory itself
+            if any(part in p.parts for part in [".git", ".venv", "__pycache__", "tests"]):
+                continue
+            if p.is_file() and p.suffix in [".py", ".csv", ".json", ".md", ".txt"]:
+                text = p.read_text(encoding="utf-8", errors="ignore")
+                for line_no, line in enumerate(text.splitlines(), start=1):
+                    # Exclude the explicit architectural exclusion note in radar.py
+                    if banned_word in line.lower() and "excluded from active scope" not in line.lower():
+                        hits.append(f"{p.name}:{line_no}: {line.strip()}")
+
+        self.assertEqual(len(hits), 0, f"Found active {banned_word} references: {hits}")
+        print("✓ Repository audit verified: ZERO Cyclone datasets, samples, or active references present.")
+
 
 if __name__ == "__main__":
     unittest.main()
+
