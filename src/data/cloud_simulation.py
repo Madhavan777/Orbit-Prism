@@ -124,21 +124,37 @@ def compute_tile_cloud_metrics(
     return cloud_frac, sensor_used
 
 
+def opaque_mask(alpha: np.ndarray) -> np.ndarray:
+    """Binary version of the soft alpha mask: 1.0 where alpha >= 0.5, else 0.0.
+
+    The set of pixels is exactly the one cloud_frac counts, so a tile's cloud_frac and routing are the
+    same whether clouds are drawn soft or opaque; only the pixel values inside the cloud change.
+    """
+    return (alpha >= 0.5).astype(np.float32)
+
+
 def generate_chip_clouds(
     chip_id: str,
     optical_chip_hwc: np.ndarray,
     target_cover: Optional[float] = None,
+    opaque: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, Tuple[float, str]]]:
     """Simulate clouds for an entire 512x512 chip.
 
     # SYNTHETIC CLOUDS: These clouds are simulated for experimentation and are NOT real cloud observations.
 
+    opaque=True (the project default, decided 2026-10-31): pixels inside the cloud mask (alpha >= 0.5)
+    become pure white, so optical sees nothing there, as under dense real cloud. opaque=False is the
+    earlier semi-transparent haze, kept as a sensitivity setting: it let optical models read through
+    clouds (AUROC 0.93 on 75-100% cloud tiles against 0.79 when opaque).
+
     Returns:
         blended_chip: (512, 512, 4) uint8 optical chip with clouds blended.
-        chip_alpha: (512, 512) float32 alpha mask.
-        tile_stats: dict mapping tile_id to (cloud_frac, sensor_used).
+        chip_alpha: (512, 512) float32 alpha mask actually used for blending.
+        tile_stats: dict mapping tile_id to (cloud_frac, sensor_used); identical for both settings.
     """
-    alpha = simulate_chip_cloud_mask(chip_id, target_cover=target_cover)
+    soft_alpha = simulate_chip_cloud_mask(chip_id, target_cover=target_cover)
+    alpha = opaque_mask(soft_alpha) if opaque else soft_alpha
     blended_chip = blend_clouds_optical(optical_chip_hwc, alpha)
 
     tile_stats = {}
@@ -146,7 +162,7 @@ def generate_chip_clouds(
         for c in range(GRID_SIZE):
             tile_id = generate_tile_id(chip_id, r, c)
             sl = (slice(r * TILE_SIZE, (r + 1) * TILE_SIZE), slice(c * TILE_SIZE, (c + 1) * TILE_SIZE))
-            cf, sensor = compute_tile_cloud_metrics(alpha[sl])
+            cf, sensor = compute_tile_cloud_metrics(soft_alpha[sl])   # same for opaque: both count alpha >= 0.5
             tile_stats[tile_id] = (cf, sensor)
 
     return blended_chip, alpha, tile_stats
