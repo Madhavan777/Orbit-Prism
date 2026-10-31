@@ -113,6 +113,17 @@ Until `src/scheduler/sim.py` exists, `src/evaluation/reference_policies.py` is a
 - **The miss-rate promise holds only if the test data resembles the calibration data.** Bolivia is a different event, so the achieved miss rate there is measured and reported, whatever it is.
 - **Fire is not loaded.** See Hazards.
 
+## Website (`app/` and `web/`)
+
+One process serves the JSON API and the static site: `python -m uvicorn app.api:app --port 8000`, then http://localhost:8000. It needs no internet (no CDN, no web fonts), so the demo works without wifi.
+
+- **Owners:** `app/api.py` and its tests are Madhavan's; `web/` is Sriram's. The frontend only calls the API; it never reads CSV or NPZ files itself, and shows no number that did not come from the API.
+- **Modes** (`GET /api/status`): `real` (needs `results/summary.csv`, `results/run_info.json` with `synthetic: false`, `data/tiles_all.csv`, a real `results/calibration.json`), `placeholder` (uses `results/synthetic/` and `data/fake_tiles.csv`; every response says `synthetic: true` and the page shows the banner "SYNTHETIC PLACEHOLDER SCORES: NOT RESULTS"), or `unavailable`.
+- **Models:** `models/<name>_int8.tflite` if present, else `models/<name>_float.keras`; `GET /api/status` says which. A tile whose routed model is missing falls back to its stored score and the response says `score_source: "stored score"`.
+- **Endpoints:** `GET /api/status`, `/summary`, `/curves`, `/dial`, `/memory`, `/demo-case`, `/chips?split=&event=`, `/tiles?chip=`, `/tile/{tile_id}/image?kind=optical|radar|label&scale=`; `POST /api/triage {tile_id, alpha}`, `/api/triage/upload` (multipart .npz with `optical` 128x128x4 and/or `radar` 128x128x2, uint8, plus `cloud_frac` and `alpha`), `/api/simulate {split, event, chip, alpha, scaled_fraction, policies}`. `alpha` is one of 0.01, 0.05, 0.1.
+- **Alert packet:** the 32-byte layout in `app/api.py` (`ALERT_FORMAT`) is provisional until the scheduler owner fixes the final one.
+- **Pixels** come from `data/processed/<event>.npz` and the raw labels (both git-ignored). Without them the site still runs and shows "pixels not built".
+
 ## Repo rules
 
 - One branch per owner (`<name>/<topic>`). Only Madhavan merges to `main`, at checkpoints. GitHub cannot enforce this on a free private repo, so it is an agreement.

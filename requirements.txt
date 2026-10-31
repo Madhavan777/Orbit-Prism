@@ -13,7 +13,9 @@ scikit-learn==1.9.1
 matplotlib==3.11.2
 pytest==9.2.0
 
-# Add (and pin) these when you start using them:
-# streamlit
-# plotly
-# pillow
+# Website (app/api.py serves the API and the static site in web/)
+fastapi==0.162.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+pillow==13.0.0
+httpx==0.28.1

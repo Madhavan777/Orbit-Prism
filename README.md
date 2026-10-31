@@ -25,6 +25,7 @@ python scripts/build_tiles_base.py  # writes data/tiles_base.csv (real labels + 
 python scripts/make_fake_data.py    # writes data/fake_tiles.csv (synthetic scores, see data/README.md)
 python scripts/baselines.py         # baselines on the Bolivia held-out event
 python scripts/evaluate.py --allow-placeholder   # plumbing test on synthetic scores -> results/synthetic/
+python -m uvicorn app.api:app --port 8000   # the website and its API: http://localhost:8000
 python scripts/check_merge.py       # merge gate: run before asking for a merge
 python -m pytest tests -q          # full test suite
 ```
@@ -47,6 +48,7 @@ Run everything from the repo root, in this order. Each step names who owns it an
 | 7 | `python -m src.calibration.calibrate` | Agnel | `results/calibration.json` |
 | 8 | `python scripts/merge_scores.py` | Madhavan | `data/tiles.csv`, `data/tiles_all.csv` |
 | 9 | `python scripts/evaluate.py` | Madhavan | `results/headline.png`, `summary.csv`, `dial.csv`, `ablations.png` |
+| 10 | `python -m uvicorn app.api:app --port 8000` | everyone | the website at http://localhost:8000 (placeholder mode until step 9 has real inputs) |
 
 `data/processed/` is not in git, so each person builds it locally (step 2) or receives the NPZ files from Agnel directly.
 
