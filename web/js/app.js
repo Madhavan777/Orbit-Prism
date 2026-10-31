@@ -8,7 +8,7 @@ const F = {
   n: (v, d = 3) => (v == null ? "–" : Number(v).toFixed(d)),
   kb: (b) => (b == null || b === "NOT_MEASURED" ? "–" : (b / 1024).toFixed(1)),
 };
-const ST = { status: null, alpha: 0.05, split: "holdout", chip: null, tiles: [], sel: null, dial: null };
+const ST = { status: null, alpha: 0.05, split: "holdout", chip: null, tiles: [], sel: null, dial: null, simTimer: null };
 const STEPS = [
   ["Chip sits in storage", "A full 13-band chip is 6.8 MB, more than the 4.2 MB of working memory, so it stays in flash and streams in."],
   ["Cut into 16 tiles", "128×128 pixels each: 65,536 B optical, 32,768 B radar."],
@@ -28,6 +28,7 @@ async function guard(fn, el) {                       // run an async UI action; 
 
 /* ------------------------------------------------------------------ top of page */
 async function init() {
+  initOrbitalCanvas();
   const s = (ST.status = await guard(API.status));
   if (!s) { $("#stats").innerHTML = `<div class="notice err">The API is not running. Start it with: python -m uvicorn app.api:app --port 8000</div>`; return; }
   if (s.banner) {
@@ -41,7 +42,13 @@ async function init() {
     [s.packets.L0 + " bytes", "alert sent before any tile"],
     [s.events.reduce((a, e) => a + e.tiles, 0).toLocaleString(), `real flood tiles, ${s.events.length} events`],
   ].map(([b, t]) => `<div class="stat"><b>${esc(b)}</b><span>${esc(t)}</span></div>`).join("");
-  $("#steps").innerHTML = STEPS.map(([t, d], i) => `<li class="${i === 9 ? "ground" : ""}"><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join("");
+  $("#steps").innerHTML = STEPS.map(([t, d], i) => `
+    <li class="${i === 9 ? "ground" : ""}" data-step="${i + 1}">
+      <span class="tier-badge ${i === 9 ? "tier-ground" : "tier-onboard"}">${i === 9 ? "GROUND RECEIPT" : "ONBOARD 4.2 MB"}</span>
+      <b>${esc(t)}</b>
+      <span>${esc(d)}</span>
+      <div class="step-live" style="display:none;"></div>
+    </li>`).join("");
   if (s.mode === "unavailable") { $("#try").insertAdjacentHTML("afterbegin", `<div class="notice err">No results are available yet. Run <code>python scripts/evaluate.py --allow-placeholder</code> (placeholder) or follow the runbook in README.md.</div>`); return; }
 
   ST.dial = await guard(API.dial);
@@ -63,16 +70,16 @@ function setAlpha(a, quiet) {
   const t = ST.dial && ST.dial.targets.find((x) => x.target_miss_rate === a), note = $("#dialnote");
   const zero = t && Object.entries(t.sends_everything).filter(([, v]) => v).map(([k]) => k);
   if (zero && zero.length) {
-    const n = t.critical_calibration_tiles || {};
     note.hidden = false;
-    note.textContent = `At ${Math.round(a * 100)}% the ${zero.join(" and ")} ${zero.length > 1 ? "paths have" : "path has"} too few critical calibration tiles (${zero.map((p) => p + " " + n[p]).join(", ")}) for an exact threshold, so the honest dial keeps every tile on ${zero.length > 1 ? "those paths" : "that path"}.`;
-  } else note.hidden = true;
-  if (!quiet) { paintGrid(); if (ST.sel) selectTile(ST.sel); }
+    note.innerHTML = `Dial target <b>${Math.round(a * 100)}%</b>: ${zero.join(" and ")} has few critical calibration tiles, so the conformal threshold is 0. <b>It keeps every tile on that path</b>, missing none.`;
+  } else { note.hidden = true; note.textContent = ""; }
+  paintGrid();
+  if (ST.sel && !quiet) selectTile(ST.sel);
 }
 
 /* ------------------------------------------------------------------ try it */
 async function loadChips() {
-  const r = await guard(() => API.chips(ST.split), $("#detail"));
+  const r = await guard(() => API.chips(ST.split), $("#grid"));
   if (!r) return;
   const sel = $("#chip");
   sel.innerHTML = r.chips.map((c) => `<option value="${esc(c.chip)}">${esc(c.chip)} · ${c.tiles} tiles · ${c.critical} critical · ${Math.round(c.mean_cloud * 100)}% cloud</option>`).join("");
@@ -104,13 +111,26 @@ function paintGrid() {
   }
   grid.innerHTML = h;
   grid.querySelectorAll("button.tile").forEach((b) => b.addEventListener("click", () => selectTile(b.dataset.id)));
+
+  // Print keep/skip and critical counts as text as well as colour
+  const countsEl = $("#grid-counts");
+  if (countsEl && ST.tiles.length) {
+    const total = ST.tiles.length;
+    const keptN = ST.tiles.filter((t) => t.kept[String(ST.alpha)]).length;
+    const skipN = total - keptN;
+    const critN = ST.tiles.filter((t) => t.critical).length;
+    countsEl.innerHTML = `${total} tiles total: <b>${keptN} kept</b> at ${Math.round(ST.alpha * 100)}% dial, <b>${skipN} skipped</b> · <b>${critN} critical</b> (≥ 30% flood)`;
+  }
 }
 
 async function selectTile(id) {
   ST.sel = id;
   document.querySelectorAll("#grid .tile").forEach((b) => b.classList.toggle("sel", b.dataset && b.dataset.id === id));
   const r = await guard(() => API.triage(id, ST.alpha), $("#detail"));
-  if (r) renderDetail(r, $("#detail"), true);
+  if (r) {
+    renderDetail(r, $("#detail"), true);
+    highlightPipelineSteps(r);
+  }
 }
 
 function hexBytes(hex) {
@@ -147,16 +167,50 @@ function renderDetail(r, el, withImages) {
     ${r.synthetic ? `<div class="notice">Placeholder mode: the dial thresholds come from synthetic scores, so this decision shows the plumbing, not a result.</div>` : ""}`;
 }
 
+/* Light up steps 3 (cloud check), 4 (model), 6 (dial) and 9 (alert) in How It Works */
+function highlightPipelineSteps(r) {
+  document.querySelectorAll("#steps li").forEach((li) => {
+    li.classList.remove("step-lit");
+    const live = li.querySelector(".step-live");
+    if (live) { live.style.display = "none"; live.innerHTML = ""; }
+  });
+
+  const setStepLive = (stepNum, html) => {
+    const li = $(`#steps li[data-step="${stepNum}"]`);
+    if (!li) return;
+    li.classList.add("step-lit");
+    const live = li.querySelector(".step-live");
+    if (live) {
+      live.innerHTML = `<span class="step-live-val">${html}</span>`;
+      live.style.display = "block";
+    }
+  };
+
+  // Step 3: Cloud check
+  setStepLive(3, `Cloud ${Math.round(r.cloud_frac * 100)}% (${r.cloud_frac >= r.cloud_switch ? "≥" : "<"} 50% → <b>${r.routed_to.toUpperCase()}</b>)`);
+  // Step 4: Run the small INT8 model
+  setStepLive(4, `${r.routed_to.toUpperCase()} model → p_flood = <b>${F.n(r.p_flood)}</b>`);
+  // Step 6: Miss-rate dial
+  setStepLive(6, `Dial α=${Math.round(r.alpha * 100)}% (τ=${F.n(r.threshold)}) → <b>${esc(r.decision)}</b>`);
+  // Step 9: Send in layers (32-byte alert)
+  setStepLive(9, `Alert packet built (${r.alert_bytes}B: 0x${r.alert_hex ? r.alert_hex.slice(0, 8) : ""}...)`);
+}
+
 async function uploadTile() {
   const f = $("#upfile").files[0], out = $("#upout");
   if (!f) { out.innerHTML = `<div class="notice err">Choose a .npz file first.</div>`; return; }
   const r = await guard(() => API.upload(f, $("#upcloud").value, ST.alpha), out);
-  if (r) { out.innerHTML = '<div class="card" style="margin-top:12px"></div>'; renderDetail(r, out.firstChild, false); }
+  if (r) {
+    out.innerHTML = '<div class="card" style="margin-top:12px"></div>';
+    renderDetail(r, out.firstChild, false);
+    highlightPipelineSteps(r);
+  }
 }
 
 /* ------------------------------------------------------------------ link simulator */
 async function runSim() {
-  const out = $("#simout"); out.innerHTML = `<p class="muted">Running…</p>`;
+  if (ST.simTimer) { clearInterval(ST.simTimer); ST.simTimer = null; }
+  const out = $("#simout"); out.innerHTML = `<p class="muted">Running simulation…</p>`;
   const body = { split: ST.split, alpha: ST.alpha, chip: $("#scope").value === "chip" ? ST.chip : null };
   const r = await guard(() => API.simulate(body), out);
   if (!r) return;
@@ -169,8 +223,65 @@ async function runSim() {
     <div class="card chart" id="simchart"></div>
     <div class="card" style="margin-top:14px"><div class="tablewrap">${summaryTable(rows)}</div></div>
     ${Object.keys(r.skipped).length ? `<div class="notice">Not run: ${Object.entries(r.skipped).map(([k, v]) => esc(k + " (" + v + ")")).join("; ")}</div>` : ""}
-    ${orbit ? `<div class="card" style="margin-top:14px"><h3>ORBIT-PRISM send queue: the first 15 packets of each layer (of ${orbit.total_packets.toLocaleString()} in total)</h3><div class="queue">${queueTable(orbit.queue_preview)}</div></div>` : ""}`;
+    ${orbit ? `
+      <div class="card" style="margin-top:14px" id="budgetProgress">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div><b>Downlink transmission sequence</b>: <span id="budgetVal">0.00 / ${r.scaled_budget_MB.toFixed(2)} MB</span></div>
+          <div class="small muted" id="budgetPct">0% of scaled pass</div>
+        </div>
+        <div class="meter" style="height:12px; margin:8px 0 6px;"><div id="budgetFill" class="fill" style="width:0%; transition:width 0.12s linear;"></div></div>
+        <div style="display:flex; gap:12px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+          <button type="button" class="btn play" id="playQueueBtn">▶ Play downlink sequence</button>
+          <span id="playStatus" class="small muted">Press Play to animate packet transmission against the scaled pass budget.</span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>ORBIT-PRISM send queue: the first 15 packets of each layer (of ${orbit.total_packets.toLocaleString()} in total)</h3>
+        <div class="queue" id="queueTableWrap">${queueTable(orbit.queue_preview)}</div>
+      </div>` : ""}`;
   recallChart($("#simchart"), curves, { scaledMB: r.scaled_budget_MB });
+
+  if (orbit && orbit.queue_preview && $("#playQueueBtn")) {
+    $("#playQueueBtn").addEventListener("click", () => playQueueAnimation(orbit.queue_preview, r.scaled_budget_MB));
+  }
+}
+
+function playQueueAnimation(queue, budgetMB) {
+  if (ST.simTimer) { clearInterval(ST.simTimer); ST.simTimer = null; }
+  const btn = $("#playQueueBtn");
+  const val = $("#budgetVal");
+  const pct = $("#budgetPct");
+  const fill = $("#budgetFill");
+  const status = $("#playStatus");
+  const rows = document.querySelectorAll("#queueTableWrap table tr");
+  let idx = 0;
+
+  btn.textContent = "⏸ Playing...";
+  status.textContent = "Transmitting packets in priority order...";
+
+  ST.simTimer = setInterval(() => {
+    if (idx >= queue.length) {
+      clearInterval(ST.simTimer);
+      ST.simTimer = null;
+      btn.textContent = "↺ Replay sequence";
+      status.textContent = "Transmission complete for preview queue.";
+      return;
+    }
+    const pkt = queue[idx];
+    const cumMB = pkt.cum_bytes / 1e6;
+    const ratio = Math.min(100, (cumMB / budgetMB) * 100);
+    fill.style.width = ratio.toFixed(1) + "%";
+    val.textContent = `${cumMB.toFixed(3)} / ${budgetMB.toFixed(2)} MB`;
+    pct.textContent = `${ratio.toFixed(1)}% of scaled pass`;
+
+    // Highlight row in table (idx + 1 because of header tr)
+    rows.forEach((r) => r.classList.remove("active-pkt"));
+    if (rows[idx + 1]) {
+      rows[idx + 1].classList.add("active-pkt");
+      rows[idx + 1].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    idx++;
+  }, 120);
 }
 
 function queueTable(q) {
@@ -202,6 +313,103 @@ async function loadResults() {
     const d = $("#democase"); d.hidden = false;
     d.innerHTML = `<h3>A flood hidden under cloud</h3><p>${esc(demo.note || "")}</p>` + (demo.tile_id ? `<div class="imgs"><figure><img alt="optical under cloud" src="${API.imageUrl(demo.tile_id, "optical", 2)}">optical under cloud</figure><figure><img alt="radar" src="${API.imageUrl(demo.tile_id, "radar", 2)}">radar</figure><figure><img alt="label" src="${API.imageUrl(demo.tile_id, "label", 2)}">label</figure></div>` : "");
   }
+}
+
+/* ------------------------------------------------------------------ hero orbital canvas */
+function initOrbitalCanvas() {
+  const canvas = $("#orbitalCanvas");
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext("2d");
+  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let angle = 0;
+
+  function render() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Deep space backdrop grid
+    ctx.strokeStyle = "rgba(36, 91, 255, 0.12)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    // Planetary Horizon Arc
+    const cx = W / 2, cy = H * 1.6, r = H * 1.15;
+    const grad = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.1);
+    grad.addColorStop(0, "#081b3d");
+    grad.addColorStop(0.85, "#0e3477");
+    grad.addColorStop(1, "rgba(36, 91, 255, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI, 0);
+    ctx.fill();
+
+    // Atmosphere limb glow
+    ctx.strokeStyle = "rgba(74, 136, 255, 0.65)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+
+    // India Nadir Ground Target
+    const tx = W * 0.54, ty = H * 0.62;
+    ctx.fillStyle = "#c6ff00";
+    ctx.beginPath();
+    ctx.arc(tx, ty, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Concentric Target Ping
+    const pingR = prefersReduced ? 10 : 6 + (Math.sin(angle * 2.5) + 1) * 6;
+    ctx.strokeStyle = "rgba(198, 255, 0, 0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(tx, ty, pingR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Orbiting Satellite Position
+    const satOrbitR = r * 1.28;
+    const satAngle = prefersReduced ? -Math.PI * 0.68 : -Math.PI * 0.68 + Math.sin(angle * 0.8) * 0.14;
+    const sx = cx + Math.cos(satAngle) * satOrbitR;
+    const sy = cy + Math.sin(satAngle) * satOrbitR;
+
+    // Laser link from satellite to target
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.lineDashOffset = prefersReduced ? 0 : -angle * 20;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Traveling Photonic Packets (Acid Lime priority + White)
+    if (!prefersReduced) {
+      for (let p = 0; p < 3; p++) {
+        const t = ((angle * 0.8 + p * 0.33) % 1.0);
+        const px = sx + (tx - sx) * t;
+        const py = sy + (ty - sy) * t;
+        ctx.fillStyle = p === 0 ? "#c6ff00" : "#ffffff";
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Satellite Bus & Solar Panels
+    ctx.fillStyle = "#d99b26"; // Kapton Gold
+    ctx.fillRect(sx - 5, sy - 3, 10, 6);
+    ctx.fillStyle = "#245bff"; // Solar wings
+    ctx.fillRect(sx - 16, sy - 2, 9, 4);
+    ctx.fillRect(sx + 7, sy - 2, 9, 4);
+
+    if (!prefersReduced) {
+      angle += 0.03;
+      requestAnimationFrame(render);
+    }
+  }
+
+  render();
 }
 
 init();
