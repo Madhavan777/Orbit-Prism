@@ -1,0 +1,17 @@
+{
+  "score_source": "real (tiles_all.csv)",
+  "synthetic": false,
+  "split": "holdout",
+  "tiles": 231,
+  "critical_tiles": 42,
+  "scaled_pass_MB": 3.0278,
+  "dial_target": 0.05,
+  "thresholds": {
+    "optical": 0.085938,
+    "radar": 0.140625
+  },
+  "scheduler": "reference",
+  "skipped": {
+    "colour_index": "needs p_ndwi (results/scores_ndwi.csv, from real band imagery)"
+  }
+}

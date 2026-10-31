@@ -1,0 +1,205 @@
+system,cum_MB,recall
+ORBIT-PRISM,0.00000,0.00000
+ORBIT-PRISM,0.06803,0.02381
+ORBIT-PRISM,0.13357,0.04762
+ORBIT-PRISM,0.19910,0.07143
+ORBIT-PRISM,0.26464,0.09524
+ORBIT-PRISM,0.33018,0.11905
+ORBIT-PRISM,0.39571,0.14286
+ORBIT-PRISM,0.46125,0.16667
+ORBIT-PRISM,0.52678,0.19048
+ORBIT-PRISM,0.59232,0.21429
+ORBIT-PRISM,0.65786,0.23810
+ORBIT-PRISM,0.75616,0.26190
+ORBIT-PRISM,0.92000,0.28571
+ORBIT-PRISM,0.98554,0.30952
+ORBIT-PRISM,1.01830,0.33333
+ORBIT-PRISM,1.05107,0.35714
+ORBIT-PRISM,1.08384,0.38095
+ORBIT-PRISM,1.11661,0.40476
+ORBIT-PRISM,1.14938,0.42857
+ORBIT-PRISM,1.21491,0.45238
+ORBIT-PRISM,1.34598,0.47619
+ORBIT-PRISM,1.41152,0.50000
+ORBIT-PRISM,1.50982,0.52381
+ORBIT-PRISM,1.57536,0.54762
+ORBIT-PRISM,1.60813,0.57143
+ORBIT-PRISM,1.64090,0.59524
+ORBIT-PRISM,1.73920,0.61905
+ORBIT-PRISM,1.93581,0.64286
+ORBIT-PRISM,2.00134,0.66667
+ORBIT-PRISM,2.19795,0.69048
+ORBIT-PRISM,2.23072,0.71429
+ORBIT-PRISM,2.26349,0.73810
+ORBIT-PRISM,2.29626,0.76190
+ORBIT-PRISM,2.42733,0.78571
+ORBIT-PRISM,2.46010,0.80952
+ORBIT-PRISM,2.52563,0.83333
+ORBIT-PRISM,2.55840,0.85714
+ORBIT-PRISM,2.75501,0.88095
+ORBIT-PRISM,2.88608,0.90476
+ORBIT-PRISM,3.44314,0.92857
+ORBIT-PRISM,3.83635,0.92857
+Capture order,0.00000,0.00000
+Capture order,0.06554,0.02381
+Capture order,0.13107,0.04762
+Capture order,0.19661,0.07143
+Capture order,0.39322,0.09524
+Capture order,0.45875,0.11905
+Capture order,0.52429,0.14286
+Capture order,0.58982,0.16667
+Capture order,0.65536,0.19048
+Capture order,0.72090,0.21429
+Capture order,0.78643,0.23810
+Capture order,0.85197,0.26190
+Capture order,0.91750,0.28571
+Capture order,0.98304,0.30952
+Capture order,1.04858,0.33333
+Capture order,1.11411,0.35714
+Capture order,1.17965,0.38095
+Capture order,1.24518,0.40476
+Capture order,1.31072,0.42857
+Capture order,1.50733,0.45238
+Capture order,4.71859,0.47619
+Capture order,4.78413,0.50000
+Capture order,6.29146,0.52381
+Capture order,6.55360,0.54762
+Capture order,8.91290,0.57143
+Capture order,8.97843,0.59524
+Capture order,9.04397,0.61905
+Capture order,9.10950,0.64286
+Capture order,9.17504,0.66667
+Capture order,9.24058,0.69048
+Capture order,9.30611,0.71429
+Capture order,9.37165,0.73810
+Capture order,9.43718,0.76190
+Capture order,9.50272,0.78571
+Capture order,9.56826,0.80952
+Capture order,12.05862,0.83333
+Capture order,12.12416,0.85714
+Capture order,12.32077,0.88095
+Capture order,12.38630,0.90476
+Capture order,12.58291,0.92857
+Capture order,12.64845,0.95238
+Capture order,12.84506,0.97619
+Capture order,12.91059,1.00000
+Capture order,15.13882,1.00000
+Discard cloudy,0.00000,0.00000
+Discard cloudy,0.06554,0.02381
+Discard cloudy,0.13107,0.04762
+Discard cloudy,0.19661,0.07143
+Discard cloudy,0.26214,0.09524
+Discard cloudy,0.32768,0.11905
+Discard cloudy,0.39322,0.14286
+Discard cloudy,0.45875,0.16667
+Discard cloudy,0.52429,0.19048
+Discard cloudy,0.58982,0.21429
+Discard cloudy,0.65536,0.23810
+Discard cloudy,0.72090,0.26190
+Discard cloudy,0.78643,0.28571
+Discard cloudy,0.85197,0.30952
+Discard cloudy,0.91750,0.33333
+Discard cloudy,1.04858,0.35714
+Discard cloudy,4.65306,0.38095
+Discard cloudy,4.71859,0.40476
+Discard cloudy,6.09485,0.42857
+Discard cloudy,6.29146,0.45238
+Discard cloudy,6.35699,0.47619
+Discard cloudy,6.55360,0.50000
+Discard cloudy,7.73325,0.50000
+Optical-only triage,0.00000,0.00000
+Optical-only triage,0.06554,0.02381
+Optical-only triage,0.13107,0.04762
+Optical-only triage,0.19661,0.07143
+Optical-only triage,0.26214,0.09524
+Optical-only triage,0.32768,0.11905
+Optical-only triage,0.39322,0.14286
+Optical-only triage,0.45875,0.16667
+Optical-only triage,0.52429,0.19048
+Optical-only triage,0.58982,0.21429
+Optical-only triage,0.65536,0.23810
+Optical-only triage,0.72090,0.26190
+Optical-only triage,0.78643,0.28571
+Optical-only triage,0.85197,0.30952
+Optical-only triage,0.91750,0.33333
+Optical-only triage,0.98304,0.35714
+Optical-only triage,1.04858,0.38095
+Optical-only triage,1.11411,0.40476
+Optical-only triage,1.17965,0.42857
+Optical-only triage,1.24518,0.45238
+Optical-only triage,1.37626,0.47619
+Optical-only triage,1.44179,0.50000
+Optical-only triage,1.57286,0.52381
+Optical-only triage,1.63840,0.54762
+Optical-only triage,1.76947,0.57143
+Optical-only triage,1.83501,0.59524
+Optical-only triage,1.90054,0.61905
+Optical-only triage,2.09715,0.64286
+Optical-only triage,2.16269,0.66667
+Optical-only triage,2.22822,0.69048
+Optical-only triage,2.29376,0.71429
+Optical-only triage,2.35930,0.73810
+Optical-only triage,2.42483,0.76190
+Optical-only triage,2.55590,0.78571
+Optical-only triage,3.01466,0.80952
+Optical-only triage,3.08019,0.83333
+Optical-only triage,3.34234,0.85714
+Optical-only triage,3.60448,0.88095
+Optical-only triage,3.73555,0.90476
+Optical-only triage,4.12877,0.92857
+Optical-only triage,4.52198,0.95238
+Optical-only triage,5.37395,0.97619
+Optical-only triage,8.38861,1.00000
+Optical-only triage,15.13882,1.00000
+No radar (ablation),0.00000,0.00000
+No radar (ablation),0.06838,0.02381
+No radar (ablation),0.13392,0.04762
+No radar (ablation),0.19946,0.07143
+No radar (ablation),0.26499,0.09524
+No radar (ablation),0.33053,0.11905
+No radar (ablation),0.39606,0.14286
+No radar (ablation),0.46160,0.16667
+No radar (ablation),0.52714,0.19048
+No radar (ablation),0.59267,0.21429
+No radar (ablation),0.65821,0.23810
+No radar (ablation),0.72374,0.26190
+No radar (ablation),0.78928,0.28571
+No radar (ablation),0.85482,0.30952
+No radar (ablation),0.92035,0.33333
+No radar (ablation),0.98589,0.35714
+No radar (ablation),1.05142,0.38095
+No radar (ablation),1.11696,0.40476
+No radar (ablation),1.24803,0.42857
+No radar (ablation),1.31357,0.45238
+No radar (ablation),1.37910,0.47619
+No radar (ablation),1.57571,0.50000
+No radar (ablation),1.64125,0.52381
+No radar (ablation),1.70678,0.54762
+No radar (ablation),1.77232,0.57143
+No radar (ablation),1.96893,0.59524
+No radar (ablation),2.03446,0.61905
+No radar (ablation),2.10000,0.64286
+No radar (ablation),2.16554,0.66667
+No radar (ablation),2.23107,0.69048
+No radar (ablation),2.42768,0.71429
+No radar (ablation),2.49322,0.73810
+No radar (ablation),2.75536,0.76190
+No radar (ablation),2.82090,0.78571
+No radar (ablation),2.95197,0.80952
+No radar (ablation),3.34518,0.83333
+No radar (ablation),3.47626,0.85714
+No radar (ablation),3.60733,0.88095
+No radar (ablation),3.67286,0.90476
+No radar (ablation),3.86947,0.92857
+No radar (ablation),4.06608,0.95238
+No radar (ablation),4.26269,0.97619
+No radar (ablation),5.83555,0.97619
+No dial (ablation),0.00000,0.00000
+No dial (ablation),0.06579,0.02381
+No dial (ablation),0.13133,0.04762
+No dial (ablation),0.19686,0.07143
+No dial (ablation),0.26240,0.09524
+No dial (ablation),0.32794,0.11905
+No dial (ablation),0.39347,0.14286
+No dial (ablation),0.45901,0.16667
+No dial (ablation),0.52454,0.19048
