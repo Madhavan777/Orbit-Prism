@@ -6,6 +6,7 @@ Outputs (in --out, default results/ for real runs and results/synthetic/ for pla
     summary.csv      per system: bytes to 95% recall, recall at the scaled pass, cloudy recall,
                      final recall, alert recall, time to first critical alert
     dial.csv         target miss rate vs achieved miss rate per path
+    dial_test.csv    the same on the chip-level test split (secondary, in-distribution check)
     curves.csv       the plotted curves as a table (the table view of headline.png)
     run_info.json    where the scores came from, the split, counts, and whether it is synthetic
 
@@ -159,6 +160,10 @@ def main():
     summary["realised_miss_rate"] = [metrics.realised_miss_rate(test, kept_mask(test, logs[p])) for p in logs]
     summary.to_csv(out / "summary.csv", index=False, lineterminator="\n", float_format="%.4f")
     dial_table(test, cal).to_csv(out / "dial.csv", index=False, lineterminator="\n", float_format="%.4f")
+    # a second check on tiles no model or dial choice was tuned on (the chip-level test split, not on the headline plot)
+    in_dist = all_tiles[all_tiles["split"] == "test"]
+    if len(in_dist):
+        dial_table(in_dist, cal).to_csv(out / "dial_test.csv", index=False, lineterminator="\n", float_format="%.4f")
 
     curves = {names[p]: metrics.recall_curve(logs[p], test) for p in logs}
     long = pd.concat([c.assign(system=n, cum_MB=c["cum_bytes"] / 1e6)[["system", "cum_MB", "recall"]]

@@ -28,6 +28,8 @@ The optical and radar sensing modalities face fundamentally different error stru
 - The radar calibrator fits strictly on radar tiles (`sensor_used == "radar"`).
 - Optical and radar calibration score distributions are **never** pooled together.
 
+**Radar dial basis (decided 2026-10-31):** each model keeps its own cut-offs, but the radar *dial* calibrates on the radar model's scores for all 118 critical `valid` tiles, not only the 42 routed to radar. Simulated clouds touch optical bands only, so a radar score does not depend on whether its tile was cloudy (clear vs cloudy critical tiles: median 0.213 vs 0.232, KS p = 0.40). The optical dial cannot do this because the optical model is blind under cloud, so it stays on its 76 clear tiles and its 1% target still falls back to threshold 0. The basis is recorded as `radar_calibration_basis` in `calibration.json`. This change was proposed after seeing the Bolivia dial results, so Bolivia is no longer fully independent evidence for it; the `test` split, which nothing was tuned on, is the cleaner check (`results/dial_test.csv`).
+
 ---
 
 ## 3. Stage 1: Isotonic Probability Calibration

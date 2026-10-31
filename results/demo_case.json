@@ -8,7 +8,7 @@
   "dial_target": 0.05,
   "thresholds": {
     "optical": 0.0859375,
-    "radar": 0.140625
+    "radar": 0.125
   },
   "truth": {
     "water_frac": 0.3884,
@@ -29,8 +29,8 @@
     "Discard cloudy": null,
     "Optical-only triage": null,
     "ORBIT-PRISM": {
-      "order": 204,
-      "cum_MB": 2.458
+      "order": 224,
+      "cum_MB": 2.479
     }
   },
   "cloudy_critical_tiles_delivered": {
@@ -38,7 +38,7 @@
     "Capture order": 4,
     "Discard cloudy": 0,
     "Optical-only triage": 15,
-    "ORBIT-PRISM": 19
+    "ORBIT-PRISM": 20
   },
   "selection_rule": "highest flood share among cloudy critical tiles that ORBIT-PRISM delivers and discard-cloudy and optical-only do not, at the scaled pass",
   "caveats": [

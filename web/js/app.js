@@ -19,7 +19,7 @@ const STEPS = [
   ["Cloud check", "Is the optical tile usable? Cloud cover of 50% or more routes the tile to radar. Clouds are simulated."],
   ["Run the small INT8 model", "The optical model on clear tiles, the radar model under cloud; both far below the 4.2 MB budget."],
   ["Subtract normal water", "A river is not a flood. In our evaluation this rule is applied to the labels (JRC permanent-water layer)."],
-  ["Miss-rate dial", "Keep or skip each tile using a threshold calibrated on held-back data, separately for each path."],
+  ["Miss-rate dial", "Keep or skip each tile using a cut-off calibrated on held-back data, separately for each sensor."],
   ["Priority score", "Flood probability × flood extent."],
   ["Scheduler", "Fill each pass by priority per byte; leftovers carry over to the next pass."],
   ["Send in layers", "A 32-byte alert first, then a preview, then the full tile. Minutes matter more than pixels."],
@@ -89,7 +89,7 @@ function setAlpha(a, quiet) {
   const zero = t && Object.entries(t.sends_everything).filter(([, v]) => v).map(([k]) => k);
   if (zero && zero.length) {
     note.hidden = false;
-    note.innerHTML = `Dial target <b>${Math.round(a * 100)}%</b>: ${zero.join(" and ")} has few critical calibration tiles, so the conformal threshold is 0. <b>It keeps every tile on that path</b>, missing none.`;
+    note.innerHTML = `Dial target <b>${Math.round(a * 100)}%</b>: the ${zero.join(" and ")} path has too few critical calibration tiles (a 1% target needs 99), so its cut-off is 0. <b>It keeps every tile on that path</b>, missing none.`;
   } else { note.hidden = true; note.textContent = ""; }
   paintGrid();
   if (ST.sel && !quiet) selectTile(ST.sel);
@@ -342,10 +342,12 @@ async function loadResults() {
   if (cur.curves) { const c = {}; Object.entries(cur.curves).forEach(([n, p]) => !n.includes("ablation") && (c[n] = p)); recallChart($("#chart"), c, { scaledMB: cur.scaled_pass_MB }); }
   else $("#chart").innerHTML = `<div class="notice err">${esc(cur.error)}</div>`;
   $("#summary").innerHTML = sum.rows ? summaryTable(sum.rows.filter((r) => !r.system.includes("ablation"))) : `<div class="notice err">${esc(sum.error)}</div>`;
-  $("#dialtable").innerHTML = dial.measured ? (dial.measured.length ? `<table><tr><th>path</th><th>target miss rate</th><th>cut-off</th><th>critical tiles</th><th>missed</th><th>achieved miss rate</th></tr>` + dial.measured.map((d) => {
-    const all = Number(d.threshold) === 0;
-    return `<tr><td>${esc(d.path)}</td><td>${F.pct(d.target_miss_rate, 0)}</td><td>${F.n(d.threshold)}</td><td>${d.critical_tiles}</td><td>${d.missed}</td><td>${all ? "not met: keeps every tile" : F.pct(d.achieved_miss_rate)}</td></tr>`;
-  }).join("") + `</table><p class="small muted">A 1% target needs at least 99 critical calibration tiles; with fewer, the cut-off is 0 and every tile is kept (nothing missed, nothing saved). A target is met only if test data resembles the calibration data; the achieved rate is whatever was measured.</p>` : "<p class='muted'>Not available yet.</p>") : `<div class="notice err">${esc(dial.error)}</div>`;
+  const nCal = ((dial.targets || [])[0] || {}).critical_calibration_tiles || {};
+  const dialRows = (rows, label) => rows.map((d) => {
+    const all = Number(d.threshold) === 0, ok = d.achieved_miss_rate <= d.target_miss_rate;
+    return `<tr><td>${label}</td><td>${esc(d.path)}</td><td>${F.pct(d.target_miss_rate, 0)}</td><td>${F.n(d.threshold)}</td><td>${d.critical_tiles}</td><td>${d.missed}</td><td class="${all ? "" : ok ? "ok" : "no"}">${all ? "not met: keeps every tile" : F.pct(d.achieved_miss_rate) + (ok ? " held" : " over")}</td></tr>`;
+  }).join("");
+  $("#dialtable").innerHTML = dial.measured ? (dial.measured.length ? `<table><tr><th>flood data</th><th>path</th><th>target miss rate</th><th>cut-off</th><th>critical tiles</th><th>missed</th><th>achieved miss rate</th></tr>` + dialRows(dial.measured, "Bolivia (unseen flood)") + dialRows(dial.measured_test || [], "test chips (seen floods)") + `</table><p class="small muted">A 1% target needs at least 99 critical calibration tiles. Radar scores do not depend on simulated cloud, so the radar dial calibrates on all ${nCal.radar} critical validation tiles. The optical model is blind under cloud, so its dial can use only the ${nCal.optical} clear ones; at 1% its cut-off is 0 and it keeps every tile (nothing missed, nothing saved).</p>` : "<p class='muted'>Not available yet.</p>") : `<div class="notice err">${esc(dial.error)}</div>`;
   if (dial.measured && dial.measured.length) {
     const lines = ["optical", "radar"].map((path) => {
       const rows = dial.measured.filter((d) => d.path === path && Number(d.threshold) > 0);
@@ -354,7 +356,7 @@ async function loadResults() {
       return `<div class="${held ? "held" : "broke"}"><b>${path} path: ${held ? "held on this flood" : "did not hold on this flood"}</b>${text}.</div>`;
     });
     const n = dial.measured[0].critical_tiles;
-    $("#dialverdict").innerHTML = `<div class="verdict">${lines.join("")}</div><p class="small muted">With ${n} critical tiles per path, one tile moves the rate by ${F.pct(1 / n)}, so these are thin evidence either way. Bolivia is a different flood from the calibration floods, and the radar model's INT8 scores sit close together, so a small shift moves many tiles past the cut-off. Use the link simulator to see how the rates move under other clouds.</p>`;
+    $("#dialverdict").innerHTML = `<div class="verdict">${lines.join("")}</div><p class="small muted">With ${n} critical tiles per path, one tile moves the rate by ${F.pct(1 / n)}, so this is thin evidence. The test chips are a second check, on floods the calibration also saw. A promise only holds when test data resembles the calibration data. Use the link simulator to see how the rates move under other clouds.</p>`;
   }
   $("#memory").innerHTML = mem.rows && mem.rows.length ? `<table><tr><th>model</th><th>dtype</th><th>weights KB</th><th>peak activation KB (est.)</th><th>total KB</th><th>% of 4.2 MB</th><th>MACs</th><th>recall</th><th>ece</th><th>basis</th></tr>` + mem.rows.map((m) =>
     `<tr><td>${esc(m.model)}</td><td>${esc(m.dtype)}</td><td>${F.kb(m.weights_bytes)}</td><td>${F.kb(m.peak_activation_bytes)}</td><td>${F.kb(m.total_bytes)}</td><td>${F.pct(m.total_bytes / mem.sram_bytes)}</td><td>${Number(m.macs).toLocaleString()}</td><td>${esc(m.recall)}</td><td>${esc(m.ece)}</td><td>${esc(m.basis)}</td></tr>`).join("") + `</table><p class="small muted">Weights are measured; peak activation is estimated from the model graph. Recall and ECE are on the validation split at the float model's 90%-recall cut-off. Radar INT8 recall of 1 means that cut-off keeps almost every tile (INT8 radar scores are compressed upward), not a better model.</p>` : `<p class="muted">The memory table has not been produced yet (it comes from the INT8 step).</p>`;

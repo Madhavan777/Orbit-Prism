@@ -8,9 +8,9 @@
     "0.1": 0.1328125
   },
   "radar": {
-    "0.01": 0.0,
-    "0.05": 0.140625,
-    "0.1": 0.1484375
+    "0.01": 0.1015625,
+    "0.05": 0.125,
+    "0.1": 0.140625
   },
   "target_alphas": [
     "0.01",
@@ -19,8 +19,9 @@
   ],
   "critical_calibration_tiles": {
     "optical": 76,
-    "radar": 42
+    "radar": 118
   },
+  "radar_calibration_basis": "all_critical_tiles (radar scores do not depend on simulated clouds)",
   "calibration_events": [
     "Ghana",
     "India",
@@ -157,29 +158,28 @@
     },
     "radar": {
       "0.01": {
-        "threshold": 0.0,
-        "k": 0,
-        "n": 42,
-        "status": "conservative_fallback",
+        "threshold": 0.1015625,
+        "k": 1,
+        "n": 118,
+        "status": "exact",
         "alpha": 0.01,
-        "min_required_n": 99,
-        "note": "Sample size n=42 < 99; no exact quantile exists, so every tile is kept (threshold 0.0)."
+        "note": "k-th smallest score with 1-based k=1 (0-based index 0)."
       },
       "0.05": {
-        "threshold": 0.140625,
-        "k": 2,
-        "n": 42,
+        "threshold": 0.125,
+        "k": 5,
+        "n": 118,
         "status": "exact",
         "alpha": 0.05,
-        "note": "k-th smallest score with 1-based k=2 (0-based index 1)."
+        "note": "k-th smallest score with 1-based k=5 (0-based index 4)."
       },
       "0.1": {
-        "threshold": 0.1484375,
-        "k": 4,
-        "n": 42,
+        "threshold": 0.140625,
+        "k": 11,
+        "n": 118,
         "status": "exact",
         "alpha": 0.1,
-        "note": "k-th smallest score with 1-based k=4 (0-based index 3)."
+        "note": "k-th smallest score with 1-based k=11 (0-based index 10)."
       }
     }
   }

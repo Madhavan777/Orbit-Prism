@@ -1,0 +1,7 @@
+path,target_miss_rate,threshold,critical_tiles,missed,achieved_miss_rate
+optical,0.0100,0.0000,62,0,0.0000
+optical,0.0500,0.0859,62,6,0.0968
+optical,0.1000,0.1328,62,8,0.1290
+radar,0.0100,0.1016,71,0,0.0000
+radar,0.0500,0.1250,71,4,0.0563
+radar,0.1000,0.1406,71,7,0.0986

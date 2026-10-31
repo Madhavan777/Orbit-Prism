@@ -96,6 +96,24 @@ def test_conformal_threshold_is_stored_exactly_so_tied_scores_are_kept():
     assert not (scores < res["threshold"]).any()
 
 
+def test_radar_dial_can_use_all_critical_tiles_but_optical_stays_on_its_own_path():
+    n = 120
+    df = pd.DataFrame({
+        "split": ["valid"] * n, "critical": [1] * n,
+        "sensor_used": ["optical"] * 80 + ["radar"] * 40,
+        "p_flood": np.linspace(0.2, 0.9, n),
+        "p_radar_all": np.linspace(0.1, 0.8, n),
+    })
+    dial = SplitConformalDial(target_alphas=[0.01])
+    dial.calibrate(df, calib_splits=["valid"], radar_all_col="p_radar_all")
+    assert dial.n_critical == {"optical": 80, "radar": 120}
+    assert dial.thresholds["radar"]["0.01"] == pytest.approx(0.1)      # k = floor(121 * 0.01) = 1: a real cut-off
+    assert dial.thresholds["optical"]["0.01"] == 0.0                   # 80 tiles: still keeps everything
+    routed = SplitConformalDial(target_alphas=[0.01])
+    routed.calibrate(df.drop(columns="p_radar_all"), calib_splits=["valid"], radar_all_col="p_radar_all")
+    assert routed.n_critical["radar"] == 40
+
+
 def test_conformal_edge_case_k_zero():
     """Test small sample size where k = floor((n + 1) * alpha) == 0 triggers conservative fallback."""
     # With n = 10 critical scores, for alpha = 0.01:

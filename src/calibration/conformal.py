@@ -124,6 +124,7 @@ class SplitConformalDial:
         self.thresholds: Dict[str, Dict[str, float]] = {"optical": {}, "radar": {}}
         self.metadata: Dict[str, Dict[str, dict]] = {"optical": {}, "radar": {}}
         self.n_critical: Dict[str, int] = {"optical": 0, "radar": 0}
+        self.radar_basis = "radar_routed_critical_tiles"
 
     def calibrate_path(
         self,
@@ -156,8 +157,15 @@ class SplitConformalDial:
         sensor_col: str = "sensor_used",
         split_col: str = "split",
         calib_splits: Optional[List[str]] = None,
+        radar_all_col: Optional[str] = None,
     ) -> "SplitConformalDial":
-        """Calibrate both optical and radar dials using critical calibration tiles."""
+        """Calibrate both optical and radar dials using critical calibration tiles.
+
+        radar_all_col names a column with the radar model's score on EVERY tile. When present, the radar dial
+        uses all critical calibration tiles, not only the cloudy ones routed to radar: simulated clouds touch
+        optical bands only, so a radar score does not depend on whether its tile happened to be cloudy. The
+        optical dial cannot do this, because the optical model is blind under cloud.
+        """
         if calib_splits is None:
             calib_splits = ["valid", "calibration"]
 
@@ -170,8 +178,11 @@ class SplitConformalDial:
         logger.info("Found %d critical calibration tiles across all paths.", len(crit_df))
 
         for path in ["optical", "radar"]:
-            sub = crit_df[crit_df[sensor_col] == path]
-            scores = sub[score_col].values
+            if path == "radar" and radar_all_col and radar_all_col in crit_df.columns:
+                scores = crit_df[radar_all_col].values
+                self.radar_basis = "all_critical_tiles (radar scores do not depend on simulated clouds)"
+            else:
+                scores = crit_df[crit_df[sensor_col] == path][score_col].values
             self.calibrate_path(scores, path)
 
         return self

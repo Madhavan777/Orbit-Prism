@@ -8,7 +8,7 @@
   "dial_target": 0.05,
   "thresholds": {
     "optical": 0.0859375,
-    "radar": 0.140625
+    "radar": 0.125
   },
   "scheduler": "sim",
   "skipped": {}

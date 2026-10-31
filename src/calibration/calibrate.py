@@ -27,6 +27,7 @@ DEFAULT_TILES_BASE = ROOT_DIR / "data" / "tiles_base.csv"
 DEFAULT_OPTICAL_SCORES = ROOT_DIR / "results" / "scores_optical_int8.csv"
 DEFAULT_RADAR_SCORES = ROOT_DIR / "results" / "scores_radar_int8.csv"
 DEFAULT_OUTPUT_JSON = ROOT_DIR / "results" / "calibration.json"
+RADAR_ALL_COL = "p_radar_all"     # the radar model's score on every tile, whichever sensor the tile was routed to
 
 
 def _read_scores(path: Path) -> pd.DataFrame:
@@ -73,6 +74,7 @@ def load_dataset_for_calibration(
                 p_floods.append(rad_map.get(key, np.nan))
 
         merged["p_flood"] = p_floods
+        merged[RADAR_ALL_COL] = [rad_map.get((r.chip, int(r.row), int(r.col)), np.nan) for r in merged.itertuples()]
         n_missing = int(merged["p_flood"].isna().sum())
         if n_missing:
             raise SystemExit(f"{n_missing} tiles have no score for their sensor path; the score files must "
@@ -168,6 +170,7 @@ class CalibrationPipeline:
             sensor_col=sensor_col,
             split_col=split_col,
             calib_splits=calib_splits,
+            radar_all_col=RADAR_ALL_COL,
         )
 
         self.is_calibrated = True
@@ -212,6 +215,7 @@ class CalibrationPipeline:
             "radar": rad_thresh,
             "target_alphas": [str(a) for a in self.target_alphas],
             "critical_calibration_tiles": self.conformal_dial.n_critical,
+            "radar_calibration_basis": self.conformal_dial.radar_basis,
             "calibration_events": self.calibration_events,
             "score_direction": "higher_score_indicates_greater_flood_probability",
             "threshold_convention": "k_th_smallest_critical_score (1-based k = floor((n+1)*alpha))",

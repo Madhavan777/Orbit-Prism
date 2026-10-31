@@ -339,6 +339,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
             targets.append({"target_miss_rate": a, "thresholds": t, "critical_calibration_tiles": n,
                             "sends_everything": {p: t[p] == 0.0 for p in t}})
         return {"synthetic": S.synthetic, "targets": targets, "measured": _frame(S.table("dial.csv")),
+                "measured_test": _frame(S.table("dial_test.csv")),
+                "radar_calibration_basis": S.cal.get("radar_calibration_basis"),
                 "score_source": S.cal.get("score_source")}
 
     @app.get("/api/memory")

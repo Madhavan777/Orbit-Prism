@@ -51,6 +51,7 @@ Design notes:
 8. **Permanent-water removal matters.** Subtracting the JRC layer turns 280 of 6,825 tiles (4.1%) from critical to non-critical, and permanent-water pixels stay in the denominator. Anyone rebuilding labels must do the same.
 
 9. **Simulated clouds are opaque (decided 2026-10-31).** Pixels inside the cloud mask (alpha >= 0.5) are pure white in the optical tiles; the old semi-transparent haze let optical models read through heavy cloud (AUROC 0.93 on 75-100% cloud tiles, against 0.79 when opaque) and hid the reason for the radar fallback. `cloud_frac`, routing, splits and `tiles_base.csv` are unchanged; the optical pixels, the optical model, its scores and everything downstream are rebuilt. The soft-cloud numbers are reported as a labelled sensitivity result, never as the headline.
+10. **The radar dial calibrates on all critical `valid` tiles (decided 2026-10-31).** Radar scores do not depend on simulated cloud, so it uses 118 tiles rather than the 42 routed to radar. The optical dial stays on its 76 clear tiles, so its 1% target keeps every tile. Decided after seeing Bolivia, so the chip-level `test` split (`results/dial_test.csv`) must be reported beside it: radar 5.6% and 9.9%, optical 9.7% and 12.9%, at the 5% and 10% targets.
 
 ## Scope (decided by Madhavan, 2026-10-31)
 
