@@ -22,8 +22,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "data" / "fake_tiles.csv"
 TEST_SPLIT = "holdout"  # Bolivia, the held-out test event (locked in CONTEXT.md)
-PASS_BYTES = 19_200_000
+REAL_PASS_BYTES = 19_200_000
 OPTICAL_B, RADAR_B = 65_536, 32_768
+# The Bolivia event (~15 MB) fits in one real pass, so the evaluation uses a SCALED pass:
+# 20% of the event's all-optical volume. Always label it "scaled" in plots and slides.
+SCALED_FRACTION = 0.20
+PASS_BYTES = None  # set in main() from the event size
 CLOUD_SWITCH = 0.5
 
 
@@ -50,18 +54,21 @@ def evaluate(name, order, nbytes, d):
     cc = d["crit"][order] * cloudy
     in_pass = sent <= PASS_BYTES
     cloud_rec = cc[in_pass].sum() / max((d["crit"] * (d["cloud"] >= CLOUD_SWITCH)).sum(), 1)
-    print(f"{name:<22} {b95:>12} {first:>14.3f} {cloud_rec:>16.3f}")
+    print(f"{name:<22} {b95:>12} {first:>16.3f} {cloud_rec:>16.3f}")
 
 
 def main():
     d = load()
+    global PASS_BYTES
     n = len(d["crit"])
+    PASS_BYTES = SCALED_FRACTION * n * OPTICAL_B
     opt_b = np.full(n, OPTICAL_B, dtype=float)
     mix_b = np.where(d["radar"], RADAR_B, OPTICAL_B).astype(float)
     cloudy = d["cloud"] >= CLOUD_SWITCH
     print(f"{n} eval tiles, {d['crit'].sum()} critical, {cloudy.mean():.2f} cloudy; "
-          f"{PASS_BYTES / 1e6:.1f} MB per pass, one pass assumed")
-    print(f"{'system':<22} {'bytes to 95%':>12} {'recall pass 1':>14} {'recall cloudy P1':>16}")
+          f"scaled pass = {PASS_BYTES / 1e6:.2f} MB ({SCALED_FRACTION:.0%} of event volume; "
+          f"real pass is {REAL_PASS_BYTES / 1e6:.1f} MB)")
+    print(f"{'system':<22} {'bytes to 95%':>12} {'recall scaled P1':>16} {'recall cloudy P1':>16}")
     evaluate("1 capture order", np.arange(n), opt_b, d)
     keep = np.flatnonzero(~cloudy)
     evaluate("2 discard cloudy", keep, opt_b, d)

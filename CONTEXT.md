@@ -44,6 +44,8 @@ Design notes:
 3. **Headline recall = full-tile recall** (critical tiles delivered as full tiles vs cumulative MB sent; this is the main plot). Alert recall (critical tiles alerted by an L0 packet) is reported as a separate metric, never mixed into the main plot.
 4. **Phase 2 length is 17 hours, not 36.** Slides, speech and the plan must say 17 hours. Checkpoints: hour 8 merge, hour 12 feature freeze, hour 14 code freeze.
 
+5. **Scaled pass budget.** Bolivia (~15 MB) fits inside one real 19.2 MB pass, so the evaluation uses a scaled pass of **20% of the event's all-optical volume** (231 tiles x 65,536 B x 0.20 = ~3.03 MB). Label it "scaled pass" on every plot and slide, and also show the full recall-vs-cumulative-MB curve. Never present it as the real 19.2 MB pass.
+
 ## Claims policy
 
 Never say "outperforms", "guarantees" (without "holds when test data resembles calibration data"), "real-time on satellite hardware" or "danger score". All results are "to be measured". Do not claim tiling or cloud filtering is new.
