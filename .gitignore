@@ -1,5 +1,7 @@
 data/raw/
 *.tif
+# partial fire statistics (part 5 of 5 only); remove this line once all parts are processed
+results/fire/real_burn_stats.csv
 *.tiff
 __pycache__/
 *.pyc

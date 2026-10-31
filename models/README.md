@@ -1,1 +1,1 @@
-﻿Trained model files (for example INT8 .tflite, each under 4.2 MB) go here and ARE committed, so the dashboard and the memory table can be reproduced from a clone. Never commit anything larger than a few MB.
+Trained model files (for example INT8 .tflite, each under 4.2 MB) go here and ARE committed, so the dashboard and the memory table can be reproduced from a clone. Never commit anything larger than a few MB.

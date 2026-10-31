@@ -21,4 +21,4 @@ The script needs no gsutil. It writes `raw/data/flood_events/HandLabeled/{LabelH
 
 ### Fires: Satellite Burned Area Dataset (Politecnico di Torino)
 
-Zenodo record 10.5281/zenodo.6597139, licence CC BY 4.0, 14.0 GB in five zips (`Satellite_burned_area_dataset_part1..5.zip`, not yet downloaded). The small metadata file `satellite_data.csv` (73 rows, one per acquisition, with a `fold` column) is committed as `data/fire/satellite_data.csv`. See the Hazards section of `CONTEXT.md` for what is and is not verified about this dataset.
+Zenodo record 10.5281/zenodo.6597139, licence CC BY 4.0, 14.0 GB in five zips (`Satellite_burned_area_dataset_part1..5.zip`). Only part 5 (1.49 GB) has been downloaded and inspected so far. Put zips in `data/raw/fire_torino/zips/` (git-ignored); `python scripts/fire_stats.py` reads them in place. The small metadata file `satellite_data.csv` (73 rows, one per acquisition, with a `fold` column) is committed as `data/fire/satellite_data.csv`. See the Hazards section of `CONTEXT.md` for what is and is not verified about this dataset.
