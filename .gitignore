@@ -1,8 +1,7 @@
 data/raw/
 *.tif
-# partial fire statistics (part 5 of 5 only); remove this line once all parts are processed
-results/fire/real_burn_stats.csv
 *.tiff
+results/fire/real_burn_stats.csv
 __pycache__/
 *.pyc
 .venv/
@@ -10,3 +9,4 @@ venv/
 .ipynb_checkpoints/
 .env*
 .DS_Store
+.pytest_cache/
