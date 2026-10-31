@@ -60,14 +60,30 @@ A comprehensive 5-point unit test suite was implemented and validated:
 
 ---
 
-## 4. Agnel's Dataset Pipeline Status
+## 5. Multi-Disaster Extension Architecture (`src/disasters/`)
 
-* Inspection script: `scripts/inspect_data.py`
-* Target folder: `data/processed/*.npz`
-* Current status: Awaiting Agnel's processed dataset files.
-* Pipeline rules established:
-  * Inspect actual NPZ keys dynamically without hardcoded assumptions.
-  * Train exclusively on `TRAIN` split with cloud filter `cloud_frac < 0.5`.
-  * Event-based validation for out-of-distribution evaluation.
-  * Data augmentation: Random horizontal/vertical flips and 90-degree rotations.
-  * `TEST` split strictly isolated (never used for model selection).
+As part of the research extension to extend ORBIT-PRISM into a **Multi-Disaster Detection and Intelligent Prioritisation System using TinyML**, the following modules have been implemented and verified without disturbing the operational flood anchor:
+
+1. **Disaster Registry (`src/disasters/registry.py`):**
+   * Covers all 6 categories: Floods, Wildfires, Cyclones, Landslides, Earthquakes, Volcanic Eruptions.
+   * Maintains strict provenance for public benchmark datasets (`Sen1Floods11`, `NASA FIRMS`, `TC-PRIMED`, `Landslide4Sense`, `xBD`, `MOUNTS`).
+   * Explicitly categorizes modules into **Implemented**, **Simulated**, **Planned**, and **Unverified**.
+
+2. **Confidence-Aware Risk Engine (`src/disasters/risk_engine.py`):**
+   * Implements multi-attribute priority formulation:
+     $$R_i = C_i \times \Big[ w_1 \cdot \big( P(\text{Event}_i) \times S_i \big) + w_2 \cdot \big( A_i \times E_i \big) \Big] \times \Omega(\text{Urgency}_i)$$
+   * Missing demographic/infrastructure exposure is explicitly flagged as `UNKNOWN` ($E_i = 0.5$ uncertain potential risk with lowered confidence) rather than assumed zero risk.
+   * Dynamically degrades optical confidence under heavy cloud coverage ($\text{cloud\_frac}$).
+
+3. **Intelligent Priority Scheduler (`src/disasters/scheduler_interface.py`):**
+   * Two-Tier LEO downlink protocol: **Tier 1 (Critical Alerts < 1 KB)** transmitted before **Tier 2 (Quantized Imagery ~25 KB)**.
+   * Full inter-pass carry-over queue and de-duplication across ground station passes.
+   * Backward-compatible CSV exporter supporting both Madhavan's legacy flood schema (`tile_id,p_flood,extent`) and the extended multi-disaster schema.
+
+4. **Dedicated TinyML Models:**
+   * **Wildfire (`src/disasters/wildfire.py`):** 6,338 parameters, **24.76 KB FP32** (Budget: $\le 60$ KB), dual-head (`p_fire`, `burn_extent`), plus NBR baseline.
+   * **Cyclone (`src/disasters/cyclone.py`):** 3,250 parameters, **12.70 KB FP32** (Budget: $\le 120$ KB), depthwise-separable conv layers, dual-head (`p_cyclone`, `intensity_score`).
+
+5. **Combined Verification Suite (`tests/`):**
+   * Total 13 tests passed cleanly (`tests/test_optical.py` + `tests/test_multi_disaster.py`).
+
