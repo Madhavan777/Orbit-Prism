@@ -2,7 +2,9 @@
 
 Pictures (display only, never model input):
     clear    natural true-colour satellite RGB with atmospheric haze correction
-    optical  the same true-colour view with realistic volumetric cloud blending
+    optical  the same view under the simulated cloud, painted with the structure of REAL clouds found in the dataset
+             (Paraguay and Sri-Lanka chips): billowy edges, shading and a cast shadow. Display only: the model is
+             given the cloud as fully occluded (pure white) pixels, see src/data/cloud_simulation.py
     radar    calibrated high-contrast SAR backscatter (water is dark, terrain is textured)
     label    luminous semi-transparent ground truth flood overlay on the real satellite terrain
 
@@ -16,6 +18,7 @@ Seed 42 reproduces data/tiles_all.csv.
 from __future__ import annotations
 
 import functools
+import hashlib
 import logging
 from pathlib import Path
 from typing import Optional
@@ -24,6 +27,7 @@ import numpy as np
 import pandas as pd
 import tifffile
 from PIL import Image
+from scipy.ndimage import gaussian_filter, shift
 
 from src.constants import CLOUD_SWITCH, TILE
 from src.data.cloud_simulation import blend_clouds_optical, derive_seed_from_chip_id, opaque_mask, simulate_chip_cloud_mask
@@ -31,6 +35,8 @@ from src.data.preprocess import preprocess_optical_chip
 
 logger = logging.getLogger("tile_views")
 HEADLINE_CLOUD_SEED = 42
+# Chips of the dataset that contain genuine cumulus and thin cloud; their cloud structure is the paint for the display.
+CLOUD_SOURCE_CHIPS = ("Paraguay_198534", "Paraguay_12870", "Sri-Lanka_135713", "Sri-Lanka_579082")
 
 
 def _hand_dir(root: Path) -> Path:
@@ -47,6 +53,59 @@ def has_imagery(root: Path, chip: str) -> bool:
         return True
     d = _hand_dir(root)
     return (d / "S2Hand" / f"{chip}_S2Hand.tif").exists() and (d / "S1Hand" / f"{chip}_S1Hand.tif").exists()
+
+
+@functools.lru_cache(maxsize=1)
+def _real_cloud_structure(root_str: str):
+    """(billow, shading) maps, 512x512 and zero-mean unit-variance, measured on real clouds in the dataset.
+
+    billow is the cloud's own opacity pattern (blue-band reflectance, band-passed to lumps 3 to 30 px across);
+    shading is the same for brightness. Returns [] when none of the source chips is on disk.
+    """
+    out = []
+    for c in CLOUD_SOURCE_CHIPS:
+        path = _hand_dir(Path(root_str)) / "S2Hand" / f"{c}_S2Hand.tif"
+        if not path.exists():
+            continue
+        a = np.nan_to_num(tifffile.imread(path)).astype(np.float32)
+        opac = np.clip((a[1] - 700.0) / 2100.0, 0.0, 1.0)           # blue reflectance: clouds are bright, ground is dark
+        lum = np.clip(a[[3, 2, 1]].mean(0) / 3000.0, 0.0, 1.0) ** 0.75
+        maps = []
+        for m in (opac, lum):
+            band = gaussian_filter(m, 2.5) - gaussian_filter(m, 30)
+            maps.append(band / (band.std() + 1e-6))
+        out.append(tuple(maps))
+    return out
+
+
+def _smoothstep(x: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    t = np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _paint_clouds(root_str: str, chip: str, rgb_clear: np.ndarray) -> np.ndarray:
+    """Cloud-covered picture: the simulated mask decides WHERE, real cloud structure decides HOW it looks."""
+    alpha = simulate_chip_cloud_mask(chip, seed=derive_seed_from_chip_id(chip, HEADLINE_CLOUD_SEED))
+    mask = (alpha >= 0.5).astype(np.float32)
+    lib = _real_cloud_structure(root_str)
+    if not lib:                                    # no source chips on disk: plain soft white
+        op = gaussian_filter(mask, 3.0)[..., None]
+        return rgb_clear * (1.0 - op) + np.array([0.95, 0.965, 0.985], dtype=np.float32) * op
+    rng = np.random.default_rng(int(hashlib.sha256(chip.encode()).hexdigest()[:8], 16))
+    billow, shade = lib[int(rng.integers(len(lib)))]
+    k = int(rng.integers(4))
+    billow, shade = np.rot90(billow, k), np.rot90(shade, k)
+    if rng.random() < 0.5:
+        billow, shade = billow[:, ::-1], shade[:, ::-1]
+    band = np.clip(1.0 - np.abs(2.0 * gaussian_filter(mask, 16) - 1.0), 0.0, 1.0)     # strongest near cloud edges
+    op = _smoothstep(gaussian_filter(mask, 5) + 0.20 * billow * (0.4 + band), 0.18, 0.82)
+    op = np.maximum(op, _smoothstep(gaussian_filter(mask, 9), 0.82, 0.95))          # solid core: nothing shows through
+    body = gaussian_filter(op, 12)[..., None]
+    cloud = np.clip(np.array([0.95, 0.965, 0.985], dtype=np.float32) * (0.84 + 0.16 * body) + 0.045 * shade[..., None]
+                    - 0.05 * (1.0 - body) * np.array([0.5, 0.4, 0.2], dtype=np.float32), 0.0, 1.0)
+    shadow = gaussian_filter(shift(op, (12, -12), order=1, mode="constant"), 6) * (1.0 - op)   # cast shadow on the ground
+    ground = rgb_clear * (1.0 - 0.45 * shadow[..., None])
+    return ground * (1.0 - op[..., None]) + cloud * op[..., None]
 
 
 def _render_chip_from_raw(root: Path, chip: str, kind: str) -> Optional[Image.Image]:
@@ -86,12 +145,7 @@ def _render_chip_from_raw(root: Path, chip: str, kind: str) -> Optional[Image.Im
         return Image.fromarray((rgb_clear * 255).astype(np.uint8))
 
     if kind == "optical":
-        # Realistic volumetric cloud blending
-        alpha = simulate_chip_cloud_mask(chip, seed=derive_seed_from_chip_id(chip, HEADLINE_CLOUD_SEED))
-        cloud_density = np.clip(alpha * 1.35 - 0.05, 0.0, 1.0) ** 0.82
-        cloud_color = np.array([244, 248, 253], dtype=np.float32) / 255.0
-        optical = rgb_clear * (1.0 - cloud_density[..., None]) + cloud_color * cloud_density[..., None]
-        optical = np.clip(optical, 0.0, 1.0)
+        optical = np.clip(_paint_clouds(str(root), chip, rgb_clear), 0.0, 1.0)
         optical[~valid] = [0.06, 0.08, 0.11]
         return Image.fromarray((optical * 255).astype(np.uint8))
 

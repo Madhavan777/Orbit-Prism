@@ -178,7 +178,7 @@ function renderDetail(r, el, withImages) {
   const modelRows = ["optical", "radar"].filter((m) => both[m]).map((m) =>
     `<dt>${m} model (${esc(both[m].model)})</dt><dd>${F.n(both[m].p_flood)} flood probability${m === r.routed_to ? " <b>(used)</b>" : ""}</dd>`).join("");
   el.innerHTML = `
-    ${withImages ? `<div class="imgs">${img("clear", "infrared, no cloud")}${img("optical", "what the camera gets")}${img("radar", "radar (water is dark)")}${img("label", "hand label: lime = flood")}</div>` : ""}
+    ${withImages ? `<div class="imgs">${img("clear", "infrared, no cloud")}${img("optical", "what the camera sees")}${img("radar", "radar (water is dark)")}${img("label", "hand label: lime = flood")}</div>` : ""}
     <h3 style="margin-top:14px">${esc(id)}</h3>
     <p class="small">Cloud cover <b>${F.pct(r.cloud_frac, 0)}</b> ${r.routed_to === "radar" ? "≥" : "<"} ${F.pct(r.cloud_switch, 0)}, so this tile is routed to the <b>${esc(r.routed_to)}</b> model.
       A system that discards cloudy frames would <b>${esc(r.discard_cloudy_would)}</b>.</p>
@@ -371,7 +371,7 @@ function renderDemoCase(d) {
   $("#democase").innerHTML = `
     <div class="imgs">
       ${fig("clear", "Infrared, clear day", "flood water is dark blue")}
-      ${fig("optical", "Camera under cloud", `${F.pct(d.cloud_frac, 0)} simulated cloud: flood hidden`)}
+      ${fig("optical", "Camera under cloud", `${F.pct(d.cloud_frac, 0)} simulated cloud, drawn with real cloud structure`)}
       ${fig("radar", "Radar", "sees through cloud: smooth water is dark")}
       ${fig("label", "Hand label (truth)", `${F.pct(d.truth.water_frac, 0)} flood in lime`)}
     </div>

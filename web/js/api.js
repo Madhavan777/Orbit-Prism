@@ -26,6 +26,6 @@ const API = (() => {
       const f = new FormData(); f.append("file", file); f.append("cloud_frac", cloud_frac); f.append("alpha", alpha);
       return fetch("/api/triage/upload", { method: "POST", body: f }).then(parse);
     },
-    imageUrl: (tile_id, kind = "optical", scale = 2) => `/api/tile/${encodeURIComponent(tile_id)}/image?kind=${kind}&scale=${scale}&v=3`,
+    imageUrl: (tile_id, kind = "optical", scale = 2) => `/api/tile/${encodeURIComponent(tile_id)}/image?kind=${kind}&scale=${scale}&v=4`,
   };
 })();
