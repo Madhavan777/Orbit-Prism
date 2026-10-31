@@ -290,3 +290,23 @@ def test_optical_metadata_schema():
     assert list(df.columns) == expected_cols
     assert len(df) == 6825
     assert set(df["split"].unique()) == {"Train", "Validation", "Test"}
+
+
+def test_radar_metadata_schema():
+    """Test data/radar_tiles.csv schema and column names."""
+    csv_path = Path("data/radar_tiles.csv")
+    if not csv_path.exists():
+        from src.data.generate_radar_metadata import generate_radar_dataset_metadata
+        df = generate_radar_dataset_metadata(out_csv=csv_path)
+    else:
+        df = pd.read_csv(csv_path)
+
+    expected_cols = [
+        "image_id", "image_path", "disaster_type", "latitude", "longitude",
+        "timestamp", "event_id", "VV", "VH",
+        "water_mask_path", "burn_mask_path", "water_fraction",
+        "burn_fraction", "cloud_fraction", "split", "source_dataset"
+    ]
+    assert list(df.columns) == expected_cols
+    assert len(df) == 6825
+    assert set(df["split"].unique()) == {"Train", "Validation", "Test"}
