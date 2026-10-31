@@ -35,7 +35,8 @@ SEED = 7
 
 # p_flood = sigmoid(SLOPE * (water_frac - CRITICAL_THRESHOLD) + noise)
 SLOPE = 5.0
-OPTICAL_NOISE_CLEAR, OPTICAL_NOISE_CLOUD = 1.0, 5.0  # sd at cloud_frac 0 / 1
+OPTICAL_NOISE_CLEAR, OPTICAL_NOISE_CLOUD = 1.0, 5.0  # sd at cloud_frac 0 / 1; optical tiles only
+                                                      # exist below CLOUD_SWITCH, so sd tops out at 3.0
 RADAR_NOISE = 1.8                                     # independent of cloud
 RADAR_FALSE_ALARM = (0.06, 2.0)  # (probability, logit boost): smooth tarmac/sand looks like water
 EVENT_SHIFT_SD = 0.5             # per-event logit offset, so held-out Bolivia is not in-distribution

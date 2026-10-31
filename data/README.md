@@ -8,6 +8,17 @@ Regenerate it with `python scripts/make_fake_data.py` (needs `results/real_water
 
 ## raw/ (git-ignored)
 
-Sen1Floods11 download. Never commit it. Layout when downloaded from `gs://sen1floods11`:
-`raw/data/flood_events/HandLabeled/{LabelHand,JRCWaterHand,S1Hand,S2Hand}/` and `raw/splits/flood_handlabeled/`.
-Labels and JRC are 3 MB; S1Hand and S2Hand are about 1.67 GB together.
+Raw downloads. Never commit them.
+
+### Floods: Sen1Floods11
+
+```bash
+python scripts/download_flood.py            # labels + JRC + splits, about 3 MB
+python scripts/download_flood.py --imagery  # also S1Hand + S2Hand, about 1.7 GB
+```
+
+The script needs no gsutil. It writes `raw/data/flood_events/HandLabeled/{LabelHand,JRCWaterHand,S1Hand,S2Hand}/` and `raw/splits/flood_handlabeled/`, the layout `scripts/real_stats.py` expects. Licence: none stated on GitHub (unconfirmed).
+
+### Fires: Satellite Burned Area Dataset (Politecnico di Torino)
+
+Zenodo record 10.5281/zenodo.6597139, licence CC BY 4.0, 14.0 GB in five zips (`Satellite_burned_area_dataset_part1..5.zip`, not yet downloaded). The small metadata file `satellite_data.csv` (73 rows, one per acquisition, with a `fold` column) is committed as `data/fire/satellite_data.csv`. See the Hazards section of `CONTEXT.md` for what is and is not verified about this dataset.

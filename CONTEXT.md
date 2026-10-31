@@ -9,7 +9,7 @@ Floods (Sen1Floods11) are the worked example, not the product. Clouds are simula
 ## Key numbers
 
 - Downlink pass: 256 kbps x 600 s = 19.2 MB (raw ceiling).
-- SRAM budget: 4.2 MB.
+- SRAM budget: 4.2 MB = 4,200,000 bytes (decimal, the conservative reading; 4.2 MiB would be 4,404,019).
 - Chip 512x512 -> 16 tiles of 128x128 (row, col in 0..3).
 - Tile size: optical (4 bands, 8-bit) 65,536 B; radar (2 bands, 8-bit) 32,768 B.
 
@@ -45,6 +45,20 @@ Design notes:
 4. **Phase 2 length is 17 hours, not 36.** Slides, speech and the plan must say 17 hours. Checkpoints: hour 8 merge, hour 12 feature freeze, hour 14 code freeze.
 
 5. **Scaled pass budget.** Bolivia (~15 MB) fits inside one real 19.2 MB pass, so the evaluation uses a scaled pass of **20% of the event's all-optical volume** (231 tiles x 65,536 B x 0.20 = ~3.03 MB). Label it "scaled pass" on every plot and slide, and also show the full recall-vs-cumulative-MB curve. Never present it as the real 19.2 MB pass.
+
+6. **The chip-level `test` split** (1,378 tiles) is a secondary in-distribution report, shown separately from Bolivia and never used for tuning. (Proposal: edit here to veto.)
+7. **Optical-only baseline, real pipeline:** the same optical model scores cloudy tiles on the simulated-cloud pixels. That is what a system without radar would do. `scripts/baselines.py` only approximates it by treating cloudy tiles as blind.
+8. **Permanent-water removal matters.** Subtracting the JRC layer turns 280 of 6,825 tiles (4.1%) from critical to non-critical, and permanent-water pixels stay in the denominator. Anyone rebuilding labels must do the same.
+
+## Hazards (floods and forest fires)
+
+- **Floods are the primary, fully measured hazard.** Forest fires are the second hazard (decided by Madhavan). The pipeline is the same; the model, the target and the sensor story change. Fire work must not delay the flood headline plot.
+- **Schema variant.** Fire files use the same 11 columns, with `water_frac` renamed `burn_frac` (share of valid pixels labelled burned). Flood files are unchanged. Fire files live in `data/fire/` and `results/fire/`; flood files stay where they are.
+- **Fire dataset (verified from the Zenodo record and the metadata CSV):** the Satellite Burned Area Dataset (Colomba et al., Politecnico di Torino, CIKM 2022), Zenodo 10.5281/zenodo.6597139, **licence CC BY 4.0**, 14.0 GB in five zips, 73 acquisitions from 27 Copernicus EMS activations, 7 folds (column `fold` in `data/fire/satellite_data.csv`). Images are 512 to 1,008 px high and 506 to 885 px wide, about 1,228 tiles at 128x128 (a sixth of the flood count), so fire test results rest on few tiles. Only 50 of 73 rows list a pre-fire date and 53 a post-fire date.
+- **Not yet verified (needs an archive download):** whether Sentinel-1 radar is in the archives (the Zenodo record and GitHub README say yes; the CIKM abstract mentions Sentinel-2 only), its polarisations and S2 bands, the mask format (the abstract mentions Copernicus EMS severity levels, so a binary burned mask must be defined), how pre/post images and cloud masks are stored, and the exact fold assignment. Do not write code that assumes these.
+- **Radar for fire is a hypothesis, not a fact.** The flood story (radar sees water through cloud) does not transfer automatically. Burn scars may change SAR backscatter, but flames and smoke are not what SAR measures. State the radar fallback for fire only after it is measured.
+- **Considered and not chosen:** CaBuAr (Sentinel-2 only, OpenRAIL licence, no radar) and Sen2Fire (Sentinel-2 plus a Sentinel-5P aerosol band, CC BY 4.0, 6.3 GB, 2,466 patches; labels come from a 1 km MODIS active-fire product, so they are coarse, and it has no radar).
+- **Open decisions for fire:** the held-out test fold (hold out whole folds, never tiles), the burned-area threshold for `critical` (default 0.30, same constant), and the per-hazard scaled pass budget.
 
 ## Data notes
 

@@ -19,6 +19,7 @@ Python 3.10 to 3.12.
 ## Run
 
 ```bash
+python scripts/download_flood.py    # labels + JRC + splits (3 MB); add --imagery for 1.7 GB more
 python scripts/real_stats.py        # needs data/raw labels; writes results/real_water_stats.csv
 python scripts/make_fake_data.py    # writes data/fake_tiles.csv (synthetic, see data/README.md)
 python scripts/baselines.py         # baselines on the Bolivia held-out event
@@ -30,7 +31,8 @@ python scripts/baselines.py         # baselines on the Bolivia held-out event
 
 - `scripts/`: data statistics, fake-data generation, baselines
 - `src/`: shared code (`constants.py`, `scheduler/`)
-- `data/`: tile CSVs; `data/raw/` is git-ignored, never commit it
+- `data/`: tile CSVs (`data/fire/` for the forest-fire hazard); `data/raw/` is git-ignored, never commit it
+- `models/`: trained model files (committed, small)
 - `results/`: generated CSVs and plots
 
 ## Working rules
