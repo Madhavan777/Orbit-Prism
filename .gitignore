@@ -1,0 +1,11 @@
+data/raw/
+*.tif
+*.tiff
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.env*
+*.tflite
+.DS_Store
