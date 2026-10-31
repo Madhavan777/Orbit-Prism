@@ -40,7 +40,9 @@ sys.path.insert(0, str(ROOT))
 
 from src.constants import CLOUD_SWITCH, L0_B, L1_BYTES, OPTICAL_B, PASS_BYTES, RADAR_B, SCALED_PASS_FRACTION, SRAM_BYTES  # noqa: E402
 from src.evaluation import metrics  # noqa: E402
-from src.evaluation.reference_policies import POLICIES, NotAvailable, run_policy  # noqa: E402
+from src.evaluation.reference_policies import NotAvailable  # noqa: E402
+from src.scheduler import sim as scheduler_sim  # noqa: E402 (the scheduler of record: policies, packets, passes)
+from src.scheduler.sim import POLICIES  # noqa: E402
 
 DIAL_TARGETS = [0.01, 0.05, 0.10]
 SYSTEM_NAMES = {
@@ -49,8 +51,6 @@ SYSTEM_NAMES = {
     "orbit_no_radar": "No radar (ablation)", "orbit_no_dial": "No dial (ablation)",
 }
 MAX_UPLOAD = 2_000_000
-ALERT_FORMAT = "<2sBBIBBHHHIQI"          # 32 bytes; provisional until src/scheduler fixes the final layout
-assert struct.calcsize(ALERT_FORMAT) == L0_B == 32
 
 
 def _clean(obj):
@@ -72,16 +72,10 @@ def _frame(df: pd.DataFrame) -> List[dict]:
     return _clean(df.astype(object).where(df.notna(), None).to_dict("records"))
 
 
-def pack_alert(chip: str, row: int, col: int, sensor: str, kept: bool, p: float, extent: float,
-               priority: float, l2_bytes: int) -> bytes:
-    """The 32-byte L0 alert (PROVISIONAL layout, owned by the scheduler): magic 'OP', version, flags
-    (bit0 radar, bit1 kept), CRC32 of the chip id, row, col, p_flood, extent and priority as uint16
-    (value x 65535), L2 size, 8 reserved bytes, CRC32 of the first 28 bytes."""
-    q = lambda v: int(round(min(max(float(v), 0.0), 1.0) * 65535))  # noqa: E731
-    flags = (1 if sensor == "radar" else 0) | (2 if kept else 0)
-    body = struct.pack("<2sBBIBBHHHIQ", b"OP", 1, flags, zlib.crc32(chip.encode()) & 0xFFFFFFFF,
-                       row, col, q(p), q(extent), q(priority), int(l2_bytes), 0)
-    return body + struct.pack("<I", zlib.crc32(body) & 0xFFFFFFFF)
+def pack_alert(chip: str, row: int, col: int, sensor: str, p: float, extent: float) -> bytes:
+    """The 32-byte L0 alert. The layout is owned by the scheduler (src/scheduler/sim.py,
+    build_l0_alert_packet); this only calls it, so there is one definition of the packet."""
+    return scheduler_sim.build_l0_alert_packet(chip, row, col, sensor, p, extent, pass_number=0, seq=0)
 
 
 def _load_script(name: str):
@@ -267,8 +261,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
         kept = bool(p >= thr)
         l2 = RADAR_B if sensor == "radar" else OPTICAL_B
         priority = p * ext
-        alert = pack_alert(row_meta["chip"], int(row_meta["row"]), int(row_meta["col"]), sensor, kept, p, ext,
-                           priority, l2)
+        alert = pack_alert(row_meta["chip"], int(row_meta["row"]), int(row_meta["col"]), sensor, p, ext)
         res = {
             "synthetic": S.synthetic, "tile_id": row_meta["tile_id"], "alpha": alpha,
             "cloud_frac": float(row_meta["cloud_frac"]), "cloud_switch": CLOUD_SWITCH, "routed_to": sensor,
@@ -298,7 +291,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
             "link": {"kbps": 256, "seconds_per_pass": 600, "pass_MB": PASS_BYTES / 1e6},
             "sram_MB": SRAM_BYTES / 1e6,
             "packets": {"L0": L0_B, "L1": L1_BYTES, "L2_optical": OPTICAL_B, "L2_radar": RADAR_B},
-            "dial_targets": DIAL_TARGETS, "cloud_switch": CLOUD_SWITCH, "scheduler": "reference",
+            "dial_targets": DIAL_TARGETS, "cloud_switch": CLOUD_SWITCH, "scheduler": "src/scheduler/sim.py",
             "notes": ["Clouds are simulated.", "Simulation of the link and memory limits, not flight hardware.",
                       "Floods only; forest fire data is not loaded."],
         }
@@ -310,11 +303,6 @@ def create_app(root: Path = ROOT) -> FastAPI:
         ev = S.tiles.groupby("event").agg(tiles=("tile_id", "size"), critical=("critical", "sum"),
                                           split=("split", lambda s: s.mode().iloc[0]))
         info["events"] = _frame(ev.reset_index())
-        try:
-            importlib.import_module("src.scheduler.sim")
-            info["scheduler"] = "reference (sim.py present but not wired into the API yet)"
-        except ImportError:
-            pass
         return _clean(info)
 
     @app.get("/api/summary")
@@ -441,13 +429,15 @@ def create_app(root: Path = ROOT) -> FastAPI:
             if pol not in POLICIES:
                 raise HTTPException(422, f"unknown policy {pol}; choose from {POLICIES}")
             try:
-                log = run_policy(sel, pol, thr)
+                log = scheduler_sim.run(sel, pol, budget, thresholds=thr)
             except NotAvailable as e:
                 skipped[SYSTEM_NAMES[pol]] = str(e)
                 continue
             curve = metrics.recall_curve(log, sel)
             keep = np.unique(np.linspace(0, len(curve) - 1, min(len(curve), 300)).astype(int))
-            first = log.head(80).merge(sel[["chip", "row", "col", "cloud_frac", "critical"]], on=["chip", "row", "col"], how="left")
+            # the queue is long, so show the first packets of EACH layer (alerts, then previews, then tiles)
+            sample = pd.concat([log[log["layer"] == layer].head(15) for layer in ("L0", "L1", "L2")])
+            first = sample.merge(sel[["chip", "row", "col", "cloud_frac", "critical"]], on=["chip", "row", "col"], how="left")
             first["tile_id"] = first["chip"] + "_" + first["row"].astype(str) + "_" + first["col"].astype(str)
             summ = metrics.summarise(SYSTEM_NAMES[pol], log, sel, budget)
             out[SYSTEM_NAMES[pol]] = {

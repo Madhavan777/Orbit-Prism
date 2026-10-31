@@ -123,7 +123,7 @@ One process serves the JSON API and the static site: `python -m uvicorn app.api:
 - **Modes** (`GET /api/status`): `real` (needs `results/summary.csv`, `results/run_info.json` with `synthetic: false`, `data/tiles_all.csv`, a real `results/calibration.json`), `placeholder` (uses `results/synthetic/` and `data/fake_tiles.csv`; every response says `synthetic: true` and the page shows the banner "SYNTHETIC PLACEHOLDER SCORES: NOT RESULTS"), or `unavailable`.
 - **Models:** `models/<name>_int8.tflite` if present, else `models/<name>_float.keras`; `GET /api/status` says which. A tile whose routed model is missing falls back to its stored score and the response says `score_source: "stored score"`.
 - **Endpoints:** `GET /api/status`, `/summary`, `/curves`, `/dial`, `/memory`, `/demo-case`, `/chips?split=&event=`, `/tiles?chip=`, `/tile/{tile_id}/image?kind=optical|radar|label&scale=`; `POST /api/triage {tile_id, alpha}`, `/api/triage/upload` (multipart .npz with `optical` 128x128x4 and/or `radar` 128x128x2, uint8, plus `cloud_frac` and `alpha`), `/api/simulate {split, event, chip, alpha, scaled_fraction, policies}`. `alpha` is one of 0.01, 0.05, 0.1.
-- **Alert packet:** the 32-byte layout in `app/api.py` (`ALERT_FORMAT`) is provisional until the scheduler owner fixes the final one.
+- **Scheduler and alert packet:** the API runs `src/scheduler/sim.py` for `/api/simulate` and builds the 32-byte alert with its `build_l0_alert_packet`; it has no packet or scheduling logic of its own.
 - **Pixels** come from `data/processed/<event>.npz` and the raw labels (both git-ignored). Without them the site still runs and shows "pixels not built".
 
 ## Repo rules

@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api import ALERT_FORMAT, create_app, pack_alert
+from app.api import create_app, pack_alert
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -110,14 +110,15 @@ def test_triage_falls_back_to_stored_scores_without_pixels(client, project):
     assert abs(r["p_flood"] - other.p_flood) < 1e-9
 
 
-def test_alert_packet_is_32_bytes_and_decodes():
-    pkt = pack_alert("Bolivia_1", 2, 3, "radar", True, 0.5, 0.25, 0.125, 32768)
-    assert len(pkt) == 32 == struct.calcsize(ALERT_FORMAT)
-    magic, ver, flags, chiphash, row, col, p, e, pr, l2, _, crc = struct.unpack(ALERT_FORMAT, pkt)
-    assert magic == b"OP" and ver == 1 and flags == 3 and (row, col) == (2, 3)
-    assert chiphash == zlib.crc32(b"Bolivia_1") and l2 == 32768
-    assert abs(p / 65535 - 0.5) < 1e-4 and abs(e / 65535 - 0.25) < 1e-4
-    assert crc == zlib.crc32(pkt[:28]) & 0xFFFFFFFF
+def test_alert_packet_is_the_schedulers_32_bytes_and_decodes():
+    pkt = pack_alert("Bolivia_1", 2, 3, "radar", 0.5, 0.25)
+    assert len(pkt) == 32 == struct.calcsize(">16sBBBBHHHIH")
+    chip, row, col, sensor, hazard, p, e, pas, seq, crc = struct.unpack(">16sBBBBHHHIH", pkt)
+    assert chip.rstrip(b"\x00") == b"Bolivia_1" and (row, col, sensor, hazard) == (2, 3, 1, 0)  # radar, flood
+    assert abs(p / 65535 - 0.5) < 1e-4 and abs(e / 65535 - 0.25) < 1e-4 and (pas, seq) == (0, 0)
+    assert crc == zlib.crc32(pkt[:30]) & 0xFFFF
+    from src.scheduler.sim import build_l0_alert_packet
+    assert pkt == build_l0_alert_packet("Bolivia_1", 2, 3, "radar", 0.5, 0.25)     # one definition of the packet
 
 
 def _npz(**arrays) -> bytes:

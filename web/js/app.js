@@ -114,7 +114,8 @@ async function selectTile(id) {
 }
 
 function hexBytes(hex) {
-  const cls = (i) => (i < 4 || i >= 28 ? "h0" : i < 10 ? "h1" : i < 16 ? "h2" : "h3");
+  // layout from src/scheduler/sim.py: chip id 0-15, row/col/sensor/hazard 16-19, scores 20-23, pass+sequence 24-29, checksum 30-31
+  const cls = (i) => (i < 16 ? "h1" : i < 20 ? "h2" : i < 24 ? "h0" : i < 30 ? "h3" : "h1");
   let h = "";
   for (let i = 0; i < hex.length / 2; i++) h += `<span class="${cls(i)}">${hex.substr(i * 2, 2)}</span>`;
   return h;
@@ -138,9 +139,9 @@ function renderDetail(r, el, withImages) {
     <dl class="kv">${modelRows}<dt>Extent</dt><dd>${F.pct(r.extent)} of the tile</dd><dt>Priority</dt><dd>${F.n(r.priority, 4)} (probability × extent)</dd>
       <dt>Full tile</dt><dd>${r.l2_bytes.toLocaleString()} bytes</dd>${r.truth ? `<dt>Truth</dt><dd>${F.pct(r.truth.water_frac)} flood water; ${r.truth.critical ? "critical" : "not critical"} (≥ 30%)</dd>` : ""}
       <dt>Score from</dt><dd>${esc(r.score_source)}</dd></dl>
-    <div class="small muted">The ${r.alert_bytes}-byte alert sent before any tile (provisional layout):</div>
+    <div class="small muted">The ${r.alert_bytes}-byte alert sent before any tile:</div>
     <div class="hex" aria-label="Alert packet in hexadecimal">${hexBytes(r.alert_hex)}</div>
-    <div class="small muted"><span style="color:var(--lemon)">header, checksum</span> · <span style="color:var(--lav)">tile id</span> · <span style="color:var(--lav2)">scores, priority</span> · <span>size, reserved</span></div>
+    <div class="small muted"><span style="color:var(--lav)">chip id, checksum</span> · <span style="color:var(--lav2)">row, column, sensor, hazard</span> · <span style="color:var(--lemon)">flood probability, extent</span> · <span>pass, sequence</span></div>
     ${r.score_source === "stored score" ? `<div class="notice">The ${esc(r.routed_to)} model could not be run here (no model file or no pixels for this tile on this machine), so the stored score is shown instead of a live model output.</div>` : ""}
     ${r.synthetic ? `<div class="notice">Placeholder mode: the dial thresholds come from synthetic scores, so this decision shows the plumbing, not a result.</div>` : ""}`;
 }
@@ -167,7 +168,7 @@ async function runSim() {
     <div class="card chart" id="simchart"></div>
     <div class="card" style="margin-top:14px"><div class="tablewrap">${summaryTable(rows)}</div></div>
     ${Object.keys(r.skipped).length ? `<div class="notice">Not run: ${Object.entries(r.skipped).map(([k, v]) => esc(k + " (" + v + ")")).join("; ")}</div>` : ""}
-    ${orbit ? `<div class="card" style="margin-top:14px"><h3>ORBIT-PRISM send queue (first ${orbit.queue_preview.length} of ${orbit.total_packets} packets)</h3><div class="queue">${queueTable(orbit.queue_preview)}</div></div>` : ""}`;
+    ${orbit ? `<div class="card" style="margin-top:14px"><h3>ORBIT-PRISM send queue: the first 15 packets of each layer (of ${orbit.total_packets.toLocaleString()} in total)</h3><div class="queue">${queueTable(orbit.queue_preview)}</div></div>` : ""}`;
   recallChart($("#simchart"), curves, { scaledMB: r.scaled_budget_MB });
 }
 
