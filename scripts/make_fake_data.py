@@ -19,16 +19,18 @@ Bolivia is a held-out event ("holdout").
 Run from the repo root:  python -I scripts/make_fake_data.py
 """
 import csv
+import sys
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from src.constants import CLOUD_SWITCH, CRITICAL_THRESHOLD  # noqa: E402
+
 SRC = ROOT / "results" / "real_water_stats.csv"
 OUT = ROOT / "data" / "fake_tiles.csv"
 
-CRITICAL_THRESHOLD = 0.30
-CLOUD_SWITCH = 0.5
 SEED = 7
 
 # p_flood = sigmoid(SLOPE * (water_frac - CRITICAL_THRESHOLD) + noise)
@@ -71,14 +73,14 @@ def main():
 
     OUT.parent.mkdir(exist_ok=True)
     with open(OUT, "w", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["event", "chip", "row", "col", "split", "water_frac", "critical",
                     "cloud_frac", "sensor_used", "p_flood", "extent"])
         w.writerows(out)
     # tiles_base.csv: the fixed per-tile inputs (no model scores). cloud_frac is still the
     # simulated placeholder; src/cloud.py must reproduce it on real pixels (see CONTEXT.md).
     with open(OUT.parent / "tiles_base.csv", "w", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["event", "chip", "row", "col", "split", "water_frac", "critical",
                     "cloud_frac", "sensor_used"])
         w.writerows(x[:9] for x in out)

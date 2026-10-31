@@ -48,7 +48,7 @@ Design notes:
 
 ## Data notes
 
-- **Missing tiles.** 7,136 tiles exist (446 chips x 16); 311 have no valid label pixels (all -1) and are absent from every CSV, leaving 6,825. Anyone tiling imagery must drop the same (chip, row, col) tiles. The keys in `data/tiles_base.csv` are the source of truth.
+- **Missing tiles.** 7,136 tiles exist (446 chips x 16); 311 have no valid label pixels (all -1) and are absent from every CSV, leaving 6,825 tiles in 441 chips (five Ghana chips, `Ghana_234935`, `Ghana_26376`, `Ghana_277`, `Ghana_5079`, `Ghana_83483`, have no valid pixels at all and are absent; 395 chips have all 16 tiles). Anyone tiling imagery must drop the same (chip, row, col) tiles. The keys in `data/tiles_base.csv` are the source of truth.
 - **Cloud simulation contract.** `cloud_frac` in `data/tiles_base.csv` is the single source of truth. The cloud mask applied to Sentinel-2 pixels (`src/cloud.py`, owner: Agnel) must cover that fraction of the tile and be deterministic from (seed, chip, row, col). `sensor_used` = `radar` iff `cloud_frac >= 0.5`. Until real imagery is in use, `data/fake_tiles.csv` stands in for `tiles_base.csv` plus scores.
 - **Sentinel-1 / Sentinel-2 dates can differ** within a chip. Check the metadata and state the gap when pairing the two sensors.
 - **Licence.** Sen1Floods11 states no licence on GitHub. Keep the credit "contains modified Copernicus Sentinel data" and do not redistribute raw imagery.

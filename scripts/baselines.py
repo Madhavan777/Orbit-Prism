@@ -15,20 +15,21 @@ on real model outputs; this only checks the evaluation plumbing.
 Run from the repo root:  python -I scripts/baselines.py
 """
 import csv
+import sys
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from src.constants import (  # noqa: E402
+    CLOUD_SWITCH, OPTICAL_B, PASS_BYTES as REAL_PASS_BYTES, RADAR_B,
+    SCALED_PASS_FRACTION as SCALED_FRACTION, TEST_SPLIT)
+
 SRC = ROOT / "data" / "fake_tiles.csv"
-TEST_SPLIT = "holdout"  # Bolivia, the held-out test event (locked in CONTEXT.md)
-REAL_PASS_BYTES = 19_200_000
-OPTICAL_B, RADAR_B = 65_536, 32_768
 # The Bolivia event (~15 MB) fits in one real pass, so the evaluation uses a SCALED pass:
 # 20% of the event's all-optical volume. Always label it "scaled" in plots and slides.
-SCALED_FRACTION = 0.20
 PASS_BYTES = None  # set in main() from the event size
-CLOUD_SWITCH = 0.5
 
 
 def load():

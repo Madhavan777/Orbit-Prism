@@ -16,15 +16,14 @@ import numpy as np
 import tifffile
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from src.constants import CRITICAL_THRESHOLD, GRID, TILE  # noqa: E402
+
 RAW = ROOT / "data" / "raw"
 LABELS = RAW / "data" / "flood_events" / "HandLabeled" / "LabelHand"
 JRC = RAW / "data" / "flood_events" / "HandLabeled" / "JRCWaterHand"
 SPLITS = RAW / "splits" / "flood_handlabeled"
 OUT = ROOT / "results" / "real_water_stats.csv"
-
-TILE = 128
-GRID = 4
-CRITICAL_THRESHOLD = 0.30  # same constant as scripts/make_fake_data.py
 
 SPLIT_FILES = {
     "train": "flood_train_data.csv",
@@ -57,6 +56,9 @@ def tile_fracs(label, jrc):
 
 
 def main():
+    if not LABELS.is_dir():
+        sys.exit(f"Missing {LABELS}\nDownload LabelHand, JRCWaterHand and the splits from "
+                 "gs://sen1floods11 into data/raw/ first (see data/README.md).")
     splits = load_splits()
     records, perm_removed = [], 0
     for lab_path in sorted(LABELS.glob("*_LabelHand.tif")):
@@ -72,14 +74,14 @@ def main():
     records = [x for x in records if not np.isnan(x[5])]
     OUT.parent.mkdir(exist_ok=True)
     with open(OUT, "w", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["event", "chip", "row", "col", "split", "water_frac"])
         for e, ch, r, c, s, wf in records:
             w.writerow([e, ch, r, c, s, f"{wf:.6f}"])
 
     wf = np.array([x[5] for x in records])
-    print(f"chips: {n_all // 16}, tiles kept: {len(records)} "
-          f"(dropped {n_all - len(records)} with no valid pixels)")
+    print(f"chips read: {n_all // 16}, chips kept: {len({x[1] for x in records})}, "
+          f"tiles kept: {len(records)} (dropped {n_all - len(records)} with no valid pixels)")
     print(f"permanent-water pixels removed: {perm_removed}")
     print(f"\n{'event':<10} {'tiles':>6} {'share >= ' + str(CRITICAL_THRESHOLD):>12}")
     for ev in sorted({x[0] for x in records}):
