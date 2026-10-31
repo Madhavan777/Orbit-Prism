@@ -289,6 +289,7 @@ def train_radar_pipeline(
     epochs: int = 25,
     batch_size: int = 32,
     internal_val_events: Tuple[str, ...] = ("Spain", "Somalia"),
+    use_class_weight: bool = False,
 ) -> Dict[str, any]:
     """Requirement 6: Complete training pipeline ready to execute when Agnel delivers data.
 
@@ -330,7 +331,7 @@ def train_radar_pipeline(
     X_val, y_p_val, y_ext_val = extract_sub(train_val)
     X_cal, y_p_cal, y_ext_cal = extract_sub(cal_df)
 
-    # Class weights
+    # Class weights on training split
     n_pos = np.sum(y_p_tr == 1)
     n_neg = np.sum(y_p_tr == 0)
     pos_weight = float(n_neg / max(n_pos, 1))
@@ -338,19 +339,34 @@ def train_radar_pipeline(
     aug = get_augmentation_layer()
     model = build_radar_model(input_shape=(128, 128, 2))
 
-    def aug_fn(img, p, ext):
-        return aug(img, training=True), {"p_flood": p, "extent": ext}
+    if use_class_weight:
+        sw_p_tr = np.where(y_p_tr == 1, pos_weight, 1.0).astype(np.float32)
+        sw_ext_tr = np.ones_like(y_ext_tr, dtype=np.float32)
 
-    train_ds = (
-        tf.data.Dataset.from_tensor_slices((X_tr, y_p_tr, y_ext_tr))
-        .shuffle(1024, seed=RANDOM_SEED)
-        .batch(batch_size)
-        .map(aug_fn, num_parallel_calls=tf.data.AUTOTUNE)
-        .prefetch(tf.data.AUTOTUNE)
-    )
+        def aug_fn(img, p, ext, sw_p, sw_ext):
+            return aug(img, training=True), (p, ext), (sw_p, sw_ext)
+
+        train_ds = (
+            tf.data.Dataset.from_tensor_slices((X_tr, y_p_tr, y_ext_tr, sw_p_tr, sw_ext_tr))
+            .shuffle(1024, seed=RANDOM_SEED)
+            .batch(batch_size)
+            .map(aug_fn, num_parallel_calls=tf.data.AUTOTUNE)
+            .prefetch(tf.data.AUTOTUNE)
+        )
+    else:
+        def aug_fn(img, p, ext):
+            return aug(img, training=True), (p, ext)
+
+        train_ds = (
+            tf.data.Dataset.from_tensor_slices((X_tr, y_p_tr, y_ext_tr))
+            .shuffle(1024, seed=RANDOM_SEED)
+            .batch(batch_size)
+            .map(aug_fn, num_parallel_calls=tf.data.AUTOTUNE)
+            .prefetch(tf.data.AUTOTUNE)
+        )
 
     val_ds = (
-        tf.data.Dataset.from_tensor_slices((X_val, {"p_flood": y_p_val, "extent": y_ext_val}))
+        tf.data.Dataset.from_tensor_slices((X_val, (y_p_val, y_ext_val)))
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
     )
@@ -361,7 +377,7 @@ def train_radar_pipeline(
         restore_best_weights=True,
     )
 
-    print(f"Starting real training on {len(train_core)} tiles (class balance weight: {pos_weight:.2f})...")
+    print(f"Starting real training on {len(train_core)} tiles (class balance weight: {pos_weight:.2f}, active={use_class_weight})...")
     history = model.fit(
         train_ds,
         validation_data=val_ds,
