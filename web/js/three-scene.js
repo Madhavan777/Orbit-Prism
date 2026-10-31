@@ -19,6 +19,25 @@
 
   var INDIA_COORDS = { lat: 20.5937, lon: 78.9629, alt: 408 };
 
+  var INTRO_STEPS = [
+    { id: 1, code: 'INTRO 01', name: 'SATELLITE REVEAL', range: [0.0, 0.20] },
+    { id: 2, code: 'INTRO 02', name: 'ANTENNA GIMBAL LOCK', range: [0.20, 0.40] },
+    { id: 3, code: 'INTRO 03', name: 'WHITE OPTICAL LASER LINK', range: [0.40, 0.62] },
+    { id: 4, code: 'INTRO 04', name: 'SUBCONTINENT SCAN', range: [0.62, 0.82] },
+    { id: 5, code: 'INTRO 05', name: 'ORBITAL HANDOFF', range: [0.82, 1.0] }
+  ];
+
+  var MISSION_SECTIONS = [
+    { id: 'top', code: '01', label: 'HERO' },
+    { id: 'problem', code: '02', label: 'THE PROBLEM' },
+    { id: 'how', code: '03', label: 'HOW IT WORKS' },
+    { id: 'try', code: '04', label: 'TRY IT' },
+    { id: 'link', code: '05', label: 'LINK SIM' },
+    { id: 'results', code: '06', label: 'RESULTS' },
+    { id: 'questions', code: '07', label: 'DEFENSE' },
+    { id: 'glossary', code: '08', label: 'LIMITS' }
+  ];
+
   var FLOOD_TILES = Array.from({ length: 16 }, function (_, idx) {
     var isCritical = [5, 6, 9, 10].indexOf(idx) !== -1;
     var isModerate = [1, 2, 8, 11, 14].indexOf(idx) !== -1;
@@ -609,6 +628,34 @@
     );
     indiaTargetGroup.add(indiaCorePin);
 
+    // 3D 4x4 Flood Grid on Earth Surface
+    var chip3DGroup = new THREE.Group();
+    chip3DGroup.position.z = 0.035;
+    indiaTargetGroup.add(chip3DGroup);
+
+    var tile3DMeshes = [];
+    var gridSpan = 1.32;
+    var cellSpan = gridSpan / 4;
+    FLOOD_TILES.forEach(function (t, idx) {
+      var r = Math.floor(idx / 4);
+      var c = idx % 4;
+      var tx = (c - 1.5) * cellSpan;
+      var ty = (1.5 - r) * cellSpan;
+
+      var tileMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(t.isCritical ? COLORS.acidLime : (t.isModerate ? COLORS.cobaltBlue : '#1E3A6E')),
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      var tileMesh = new THREE.Mesh(new THREE.PlaneGeometry(cellSpan * 0.86, cellSpan * 0.86), tileMat);
+      tileMesh.position.set(tx, ty, 0);
+      chip3DGroup.add(tileMesh);
+      tile3DMeshes.push({ mesh: tileMesh, mat: tileMat, isCritical: t.isCritical, id: idx });
+    });
+
     // Ripples
     var rippleMeshes = [];
     for (var rIdx = 0; rIdx < 3; rIdx++) {
@@ -655,7 +702,7 @@
     laserGroup.add(sheathLaserMesh);
 
     // Packets
-    var packetCount = 28;
+    var packetCount = 32;
     var packetGeo = new THREE.BufferGeometry();
     var packetPos = new Float32Array(packetCount * 3);
     var packetColors = new Float32Array(packetCount * 3);
@@ -668,7 +715,7 @@
     packetGeo.setAttribute('position', new THREE.BufferAttribute(packetPos, 3));
     packetGeo.setAttribute('color', new THREE.BufferAttribute(packetColors, 3));
     var packetMat = new THREE.PointsMaterial({
-      size: 0.12,
+      size: 0.14,
       vertexColors: true,
       transparent: true,
       opacity: 0.9,
@@ -676,6 +723,37 @@
     });
     var laserPackets = new THREE.Points(packetGeo, packetMat);
     scene.add(laserPackets);
+
+    // Intro Sequence State
+    var introProgress = 0.0;
+    var introComplete = false;
+
+    window.skipIntro = function () {
+      introProgress = 1.0;
+      introComplete = true;
+      var introBanner = document.getElementById('introBanner');
+      if (introBanner) introBanner.style.display = 'none';
+    };
+
+    window.replayIntro = function () {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      introProgress = 0.0;
+      introComplete = false;
+      var introBanner = document.getElementById('introBanner');
+      if (introBanner) introBanner.style.display = 'flex';
+    };
+
+    window.highlight3DTile = function (tileId, isCritical) {
+      tile3DMeshes.forEach(function (item) {
+        if (item.id === tileId) {
+          item.mat.color.set(isCritical ? COLORS.acidLime : '#FFFFFF');
+          item.mat.opacity = 1.0;
+          item.mesh.scale.set(1.3, 1.3, 1.3);
+        } else {
+          item.mesh.scale.set(1.0, 1.0, 1.0);
+        }
+      });
+    };
 
     // Smooth Scroll Tracking
     var targetScroll = 0;
@@ -690,7 +768,7 @@
       var btn = document.getElementById('drag3dBtn');
       if (btn) {
         btn.classList.toggle('active', inspect3D);
-        btn.innerText = inspect3D ? 'EXIT 3D DRAG' : '3D DRAG MODE';
+        btn.innerHTML = inspect3D ? '&#9679; EXIT 3D DRAG' : '3D DRAG MODE';
       }
       return inspect3D;
     };
@@ -701,17 +779,25 @@
       var cur = window.scrollY || docEl.scrollTop || 0;
       targetScroll = clamp(cur / max, 0, 1);
 
+      if (cur > 40 && !introComplete) {
+        window.skipIntro();
+      }
+
       var ribbon = document.getElementById('scrollRibbon');
       if (ribbon) {
         ribbon.style.width = Math.max(2, targetScroll * 100) + '%';
       }
 
-      // Update vertical rail dots
       var railDots = document.querySelectorAll('.rail-dot');
       var secIdx = Math.min(railDots.length - 1, Math.floor(targetScroll * railDots.length + 0.05));
       railDots.forEach(function (dot, i) {
         dot.classList.toggle('active', i === secIdx);
       });
+
+      var stageLabel = document.getElementById('hudStage');
+      if (stageLabel && MISSION_SECTIONS[secIdx]) {
+        stageLabel.innerText = MISSION_SECTIONS[secIdx].code + ' ' + MISSION_SECTIONS[secIdx].label;
+      }
     }
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
@@ -763,6 +849,28 @@
       requestAnimationFrame(animate);
       var dt = Math.min(clock.getDelta(), 0.05);
       var elapsed = clock.getElapsedTime();
+
+      // Intro progression
+      if (!introComplete) {
+        introProgress = clamp(introProgress + dt * 0.12, 0.0, 1.0);
+        if (introProgress >= 1.0) {
+          introComplete = true;
+          var introBanner = document.getElementById('introBanner');
+          if (introBanner) introBanner.style.display = 'none';
+        } else {
+          var step = INTRO_STEPS[INTRO_STEPS.length - 1];
+          for (var sIdx = 0; sIdx < INTRO_STEPS.length; sIdx++) {
+            if (introProgress >= INTRO_STEPS[sIdx].range[0] && introProgress <= INTRO_STEPS[sIdx].range[1]) {
+              step = INTRO_STEPS[sIdx];
+              break;
+            }
+          }
+          var stepText = document.getElementById('introStepText');
+          if (stepText) {
+            stepText.innerText = step.code + ': ' + step.name + ' (' + Math.round(introProgress * 100) + '%)';
+          }
+        }
+      }
 
       smoothScroll = THREE.MathUtils.damp(smoothScroll, targetScroll, 5.2, dt);
       var s = smoothScroll;
@@ -835,7 +943,7 @@
 
       var pAttr = packetGeo.attributes.position;
       for (var k = 0; k < packetCount; k++) {
-        var t = (k / packetCount + elapsed * 0.75) % 1.0;
+        var t = (k / packetCount + elapsed * 0.82) % 1.0;
         pAttr.setXYZ(
           k,
           THREE.MathUtils.lerp(emitterWorldPos.x, indiaWorldPos.x, t),
@@ -844,6 +952,12 @@
         );
       }
       pAttr.needsUpdate = true;
+
+      // Pulse 3D tiles gently
+      tile3DMeshes.forEach(function (item, idx) {
+        var pulse = item.isCritical ? 0.55 + 0.35 * Math.sin(elapsed * 4.5 + idx) : 0.3;
+        item.mat.opacity = pulse;
+      });
 
       rippleMeshes.forEach(function (rip, idx) {
         var ph = (elapsed * 0.7 + idx * 0.33) % 1.0;

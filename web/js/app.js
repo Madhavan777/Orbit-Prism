@@ -62,6 +62,18 @@ async function init() {
   setAlpha(ST.alpha, true);
   loadChips();
   loadResults();
+
+  // Live Telemetry Micro-Jitter
+  setInterval(() => {
+    const latEl = document.getElementById("hudLat");
+    const lonEl = document.getElementById("hudLon");
+    const altEl = document.getElementById("hudAlt");
+    const rateEl = document.getElementById("hudRate");
+    if (latEl) latEl.innerText = (20.5937 + (Math.random() - 0.5) * 0.0016).toFixed(4) + "° N";
+    if (lonEl) lonEl.innerText = (78.9629 + (Math.random() - 0.5) * 0.0016).toFixed(4) + "° E";
+    if (altEl) altEl.innerText = (408.0 + (Math.random() - 0.5) * 0.15).toFixed(2) + " KM";
+    if (rateEl) rateEl.innerText = (44.2 + (Math.random() - 0.5) * 0.4).toFixed(1) + " Gbps";
+  }, 1000);
 }
 
 function setAlpha(a, quiet) {
@@ -130,6 +142,9 @@ async function selectTile(id) {
   if (r) {
     renderDetail(r, $("#detail"), true);
     highlightPipelineSteps(r);
+    if (window.highlight3DTile && r.tile) {
+      window.highlight3DTile(r.tile.row * 4 + r.tile.col, r.critical);
+    }
   }
 }
 

@@ -48,6 +48,9 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
         3D DRAG MODE
       </button>
+      <button class="hud-btn" onclick="window.replayIntro()" title="Replay 5-Step Opening Sequence">
+        &#8634; REPLAY INTRO
+      </button>
       <span class="pill" id="pill">CONNECTING...</span>
     </div>
   </div>
@@ -70,12 +73,16 @@
     <span class="active-dot"></span>
     <span>ORBIT LINK: <strong>ACTIVE</strong></span>
     <span style="color:var(--line);">|</span>
-    <span>MISSION: <strong>ORBIT-PRISM // AETHER-IX</strong></span>
+    <span>STAGE: <strong id="hudStage" style="color:var(--lav2);">01 HERO</strong></span>
+    <div id="introBanner" style="display:inline-flex; align-items:center; gap:8px; margin-left:8px; border-left:1px solid var(--line); padding-left:10px;">
+      <span id="introStepText" style="color:var(--lemon); font-weight:700;">INTRO 01: SATELLITE REVEAL (0%)</span>
+      <button onclick="window.skipIntro()" style="background:transparent; border:none; color:var(--muted); font-size:10px; cursor:pointer; font-family:var(--mono);">SKIP &#9654;</button>
+    </div>
   </div>
   <div class="hud-pill">
-    <span>LAT: <strong>20.5937° N</strong></span>
-    <span>LON: <strong>78.9629° E</strong></span>
-    <span>ALT: <strong style="color:var(--lemon);">408 KM</strong></span>
+    <span>LAT: <strong id="hudLat">20.5937° N</strong></span>
+    <span>LON: <strong id="hudLon">78.9629° E</strong></span>
+    <span>ALT: <strong id="hudAlt" style="color:var(--lemon);">408.00 KM</strong></span>
   </div>
 </div>
 
@@ -116,8 +123,8 @@
           <span class="telemetry-val">408 KM (LEO SUN-SYNC)</span>
         </div>
         <div class="telemetry-row">
-          <span class="telemetry-label">BEAM APERTURE</span>
-          <span class="telemetry-val">0.0045 rad COHERENT OPTICAL</span>
+          <span class="telemetry-label">DOWNLINK RATE</span>
+          <span class="telemetry-highlight" id="hudRate">44.2 Gbps COHERENT OPTICAL</span>
         </div>
         <div class="telemetry-row">
           <span class="telemetry-label">TRIAGE CORE CEILING</span>
@@ -402,7 +409,7 @@
       <p>A 3.03 MB transmission budget representing 20% of the event data, used for benchmarking pass scheduling under link constraints.</p>
     </div>
     <div class="glossary-card">
-      <h4>L0 / L1 / L2 Packets</h4>
+      <h4>L0 / L1 / L2</h4>
       <p>L2 represents immediate 32-byte alert packets; L1 represents compressed preview thumbnails; L0 represents full uncompressed raw pixel data.</p>
     </div>
     <div class="glossary-card">

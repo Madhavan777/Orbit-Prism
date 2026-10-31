@@ -7,7 +7,7 @@
   --bg: #05070d;
   --surface: #0a1020;
   --surface2: #0e172c;
-  --surface-card: rgba(10, 16, 32, 0.82);
+  --surface-card: rgba(10, 16, 32, 0.85);
   --line: rgba(36, 91, 255, 0.35);
   --line-bright: rgba(36, 91, 255, 0.75);
   --ink: #f4f7ff;
@@ -142,7 +142,7 @@ nav {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(5, 7, 13, 0.82);
+  background: rgba(5, 7, 13, 0.85);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -465,6 +465,11 @@ nav .link span.num {
   border-radius: 6px;
   background: rgba(5, 7, 13, 0.75);
   border: 1px solid rgba(36, 91, 255, 0.25);
+  box-shadow: 0 0 20px rgba(36, 91, 255, 0.25);
+  transition: box-shadow 0.3s;
+}
+#orbitalCanvas:hover {
+  box-shadow: 0 0 30px rgba(198, 255, 0, 0.4);
 }
 
 /* 4 Live Stats from /api/status */
@@ -487,6 +492,7 @@ nav .link span.num {
 .stat:hover {
   border-color: var(--line-bright);
   box-shadow: 0 0 25px rgba(36, 91, 255, 0.3);
+  transform: translateY(-2px);
 }
 .stat .k {
   font-family: var(--mono);
@@ -531,7 +537,7 @@ nav .link span.num {
 }
 .problem-card:hover {
   border-color: var(--lemon);
-  box-shadow: 0 0 30px rgba(198, 255, 0, 0.2);
+  box-shadow: 0 0 30px rgba(198, 255, 0, 0.25);
   transform: translateY(-2px);
 }
 .problem-card .num {
@@ -580,8 +586,13 @@ ol.steps li:hover {
 }
 ol.steps li.lit {
   border-color: var(--lemon);
-  background: rgba(198, 255, 0, 0.08);
-  box-shadow: 0 0 28px rgba(198, 255, 0, 0.35);
+  background: rgba(198, 255, 0, 0.09);
+  box-shadow: 0 0 28px rgba(198, 255, 0, 0.45);
+  animation: step-glow 1.5s infinite alternate ease-in-out;
+}
+@keyframes step-glow {
+  0% { box-shadow: 0 0 14px rgba(198, 255, 0, 0.25); border-color: rgba(198, 255, 0, 0.6); }
+  100% { box-shadow: 0 0 35px rgba(198, 255, 0, 0.7); border-color: var(--lemon); }
 }
 ol.steps li .s-num {
   font-family: var(--mono);
@@ -753,6 +764,21 @@ select:focus, input[type="text"]:focus {
   transition: all 0.2s;
   aspect-ratio: 1 / 1;
 }
+.tile-btn::before {
+  content: "";
+  position: absolute;
+  top: -100%;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, transparent, rgba(198, 255, 0, 0.28), transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.tile-btn:hover::before {
+  top: 100%;
+  transition: top 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
 .tile-btn:hover {
   border-color: var(--lemon);
   transform: scale(1.02);
@@ -889,8 +915,13 @@ select:focus, input[type="text"]:focus {
   height: 100%;
   width: 0%;
   background: linear-gradient(90deg, #245bff, #c6ff00);
-  transition: width 0.25s ease-out;
-  box-shadow: 0 0 10px #c6ff00;
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 0 14px #c6ff00;
+}
+tr.active-pkt td {
+  background: rgba(198, 255, 0, 0.18) !important;
+  color: #ffffff;
+  border-color: var(--lemon);
 }
 
 /* ==========================================================================
