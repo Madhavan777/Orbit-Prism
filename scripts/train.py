@@ -51,6 +51,7 @@ def parse_args():
     parser.add_argument("--cloud_threshold", type=float, default=0.50, help="Maximum cloud fraction allowed in TRAIN")
     parser.add_argument("--output_model", type=str, default="models/optical_float.keras", help="Model checkpoint path")
     parser.add_argument("--critical_flood_threshold", type=float, default=0.30, help="Water fraction for critical flood")
+    parser.add_argument("--seed", type=int, default=42, help="Fixed random seed for reproducibility")
     parser.add_argument("--dry_run", action="store_true", help="Run 1 epoch test with synthetic data if NPZ not ready")
     return parser.parse_args()
 
@@ -130,7 +131,9 @@ def train():
     print("ORBIT-PRISM: Optical Flood CNN Training Pipeline (Shenbaga)")
     print("=" * 70)
 
-    # 1. Hardware Initialization
+    # 1. Hardware & Seed Initialization
+    keras.utils.set_random_seed(args.seed)
+    print(f"Fixed Random Seed set to: {args.seed}")
     setup_gpu()
 
     data_dir = Path(args.data_dir)
@@ -183,8 +186,8 @@ def train():
             print(f"[WARNING] none of {INTERNAL_VAL_EVENTS} are in the data: early stopping falls back to the "
                   "calibration split, which biases the miss-rate dial. Do not use this for final results.")
             x_es, y_es_p, y_es_e = x_cal, y_cal_p, y_cal_e
-        print(f"TRAIN Set (cloud_frac < {args.cloud_threshold}): {len(x_train)} samples")
-        print(f"EARLY-STOPPING Set (events {INTERNAL_VAL_EVENTS}, train split): {len(x_es)} samples")
+        print(f"TRAIN Set (cloud_frac < {args.cloud_threshold}): {len(x_train)} samples ({int(y_train_p.sum())} critical)")
+        print(f"EARLY-STOPPING Set (events {INTERNAL_VAL_EVENTS}, train split): {len(x_es)} samples ({int(y_es_p.sum())} critical)")
         print(f"CAL/VAL Set: {len(x_cal)} samples")
         print(f"HOLDOUT tiles present and untouched: {int((splits_str == 'holdout').sum())}")
 
