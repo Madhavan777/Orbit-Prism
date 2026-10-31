@@ -528,7 +528,8 @@
     lookZ:            [ 1.80,   0.80,    0.90,    2.50,    1.10,    0.50,    0.20,   -1.20 ],
 
     laserOpacity:     [ 1.00,   0.75,    0.45,    0.30,    0.95,    0.85,    0.50,    0.25 ],
-    chipGridOpacity:  [ 0.00,   0.05,    0.35,    1.00,    0.55,    0.15,    0.20,    0.05 ]
+    chipGridOpacity:  [ 0.00,   0.05,    0.35,    1.00,    0.55,    0.15,    0.20,    0.05 ],
+    orbitRingOpacity: [ 0.70,   0.90,    0.80,    0.50,    0.75,    0.95,    0.90,    0.80 ]
   };
 
   window.initOrbital3D = function (container) {
@@ -732,6 +733,129 @@
       indiaTargetGroup.add(ripple);
       rippleMeshes.push(ripple);
     }
+
+    // ------------------------------------------------------------------------
+    // LUMINOUS ORBITAL RINGS & MINIATURE ORBITING SATELLITE
+    // ------------------------------------------------------------------------
+    var orbitRadius = EARTH_RADIUS * 1.22;
+
+    // 1. Primary Inclined Orbit (Electric Cobalt + Pure White Core Filament)
+    var primaryOrbitPoints = [];
+    for (var oi = 0; oi < 128; oi++) {
+      var oa = (oi / 128) * Math.PI * 2;
+      primaryOrbitPoints.push(
+        new THREE.Vector3(
+          Math.cos(oa) * orbitRadius,
+          Math.sin(oa) * orbitRadius * 0.44,
+          Math.sin(oa) * orbitRadius * 0.90
+        )
+      );
+    }
+    var primaryCurve = new THREE.CatmullRomCurve3(primaryOrbitPoints, true);
+    var primaryTubeGeo = new THREE.TubeGeometry(primaryCurve, 128, 0.018, 6, true);
+    var orbitTubeMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.cobaltBlue),
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending
+    });
+    var primaryOrbitTube = new THREE.Mesh(primaryTubeGeo, orbitTubeMat);
+    earthGroup.add(primaryOrbitTube);
+
+    var primaryCoreGeo = new THREE.TubeGeometry(primaryCurve, 128, 0.006, 4, true);
+    var primaryCoreMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color('#FFFFFF'),
+      transparent: true,
+      opacity: 0.70,
+      blending: THREE.AdditiveBlending
+    });
+    var primaryCoreTube = new THREE.Mesh(primaryCoreGeo, primaryCoreMat);
+    earthGroup.add(primaryCoreTube);
+
+    // Glowing Orbital Waypoint Nodes along the Primary Orbit
+    var orbitNodeCoords = [];
+    for (var onIdx = 0; onIdx < 20; onIdx++) {
+      var pt = primaryCurve.getPoint(onIdx / 20);
+      orbitNodeCoords.push(pt.x, pt.y, pt.z);
+    }
+    var orbitNodeGeo = new THREE.BufferGeometry();
+    orbitNodeGeo.setAttribute('position', new THREE.Float32BufferAttribute(orbitNodeCoords, 3));
+    var orbitNodeMat = new THREE.PointsMaterial({
+      color: new THREE.Color('#B6D5FF'),
+      size: 0.16,
+      transparent: true,
+      opacity: 0.90,
+      blending: THREE.AdditiveBlending
+    });
+    var orbitNodes = new THREE.Points(orbitNodeGeo, orbitNodeMat);
+    earthGroup.add(orbitNodes);
+
+    // 2. Second Polar Calibration Orbit Ring (Acid Lime)
+    var polarOrbitPoints = [];
+    for (var pi = 0; pi < 128; pi++) {
+      var pa = (pi / 128) * Math.PI * 2;
+      polarOrbitPoints.push(
+        new THREE.Vector3(
+          Math.cos(pa) * orbitRadius * 0.35,
+          Math.sin(pa) * orbitRadius * 1.05,
+          Math.cos(pa) * orbitRadius * 0.96
+        )
+      );
+    }
+    var polarCurve = new THREE.CatmullRomCurve3(polarOrbitPoints, true);
+    var polarTubeGeo = new THREE.TubeGeometry(polarCurve, 128, 0.014, 6, true);
+    var polarTubeMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.acidLime),
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending
+    });
+    var polarOrbitTube = new THREE.Mesh(polarTubeGeo, polarTubeMat);
+    earthGroup.add(polarOrbitTube);
+
+    // 3. Third Equatorial Navigation Ring (Subtle Cyan-Cobalt)
+    var eqOrbitPoints = [];
+    var eqRadius = EARTH_RADIUS * 1.32;
+    for (var ei = 0; ei < 128; ei++) {
+      var ea = (ei / 128) * Math.PI * 2;
+      eqOrbitPoints.push(
+        new THREE.Vector3(
+          Math.cos(ea) * eqRadius,
+          Math.sin(ea) * eqRadius * 0.14,
+          Math.sin(ea) * eqRadius * 0.98
+        )
+      );
+    }
+    var eqCurve = new THREE.CatmullRomCurve3(eqOrbitPoints, true);
+    var eqTubeGeo = new THREE.TubeGeometry(eqCurve, 128, 0.010, 4, true);
+    var eqTubeMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color('#4E8AFF'),
+      transparent: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending
+    });
+    var eqOrbitTube = new THREE.Mesh(eqTubeGeo, eqTubeMat);
+    earthGroup.add(eqOrbitTube);
+
+    // 4. Miniature Orbiting Satellite revolving along the Primary Orbit
+    var miniSatGroup = new THREE.Group();
+    var miniBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.14, 0.24),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color('#FFFFFF') })
+    );
+    var miniWings = new THREE.Mesh(
+      new THREE.BoxGeometry(0.72, 0.02, 0.18),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.cobaltBlue) })
+    );
+    var miniBeacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 12, 12),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.acidLime) })
+    );
+    miniBeacon.position.set(0, 0.09, 0.09);
+    miniSatGroup.add(miniBody);
+    miniSatGroup.add(miniWings);
+    miniSatGroup.add(miniBeacon);
+    earthGroup.add(miniSatGroup);
 
     // Laser Core & Sheath
     var laserGroup = new THREE.Group();
@@ -1094,6 +1218,22 @@
         rip.scale.setScalar(0.35 + ph * 3.4);
         rip.material.opacity = (1.0 - ph) * impactActive * 0.85;
       });
+
+      // Update Orbital Rings & Miniature Orbiting Satellite
+      var orbitOp = sampleSpline(SCROLL_KEYFRAMES.orbitRingOpacity, s);
+      orbitTubeMat.opacity = orbitOp * 0.85;
+      primaryCoreMat.opacity = orbitOp * 0.70;
+      polarTubeMat.opacity = orbitOp * 0.75;
+      eqTubeMat.opacity = orbitOp * 0.45;
+      orbitNodeMat.opacity = orbitOp * 0.90;
+
+      // Animate Mini Satellite along Primary Orbit Curve
+      var miniU = (elapsed * 0.07) % 1.0;
+      var miniPos = primaryCurve.getPoint(miniU);
+      var miniNext = primaryCurve.getPoint((miniU + 0.01) % 1.0);
+      miniSatGroup.position.copy(miniPos);
+      miniSatGroup.lookAt(miniNext);
+      miniBeacon.scale.setScalar(0.9 + Math.sin(elapsed * 12.0) * 0.4);
 
       renderer.render(scene, camera);
     }
