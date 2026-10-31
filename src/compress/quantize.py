@@ -140,6 +140,7 @@ def convert_model_to_full_int8(
 def quantize_radar_model(
     radar_float_path: Optional[Path] = None,
     train_radar_images: Optional[np.ndarray] = None,
+    num_calibration_steps: int = 500,
 ) -> Dict[str, any]:
     """Quantize Radar model to INT8 using real TRAIN radar tiles."""
     if radar_float_path is None:
@@ -157,7 +158,10 @@ def quantize_radar_model(
             "message": "TRAIN radar images required for representative calibration dataset.",
         }
 
-    rep_gen = build_representative_dataset_generator(train_radar_images, batch_size=1, num_calibration_steps=100)
+    # The generator walks the array in order and stops after num_calibration_steps tiles, so pass a
+    # shuffled, stratified sample (see scripts/quantize_and_score.py) and enough of it.
+    rep_gen = build_representative_dataset_generator(
+        train_radar_images, batch_size=1, num_calibration_steps=num_calibration_steps)
     out_path = MODELS_DIR / "radar_int8.tflite"
 
     _, info = convert_model_to_full_int8(radar_float_path, rep_gen, output_tflite_path=out_path)
@@ -167,6 +171,7 @@ def quantize_radar_model(
 def quantize_optical_model(
     optical_float_path: Optional[Path] = None,
     train_optical_images: Optional[np.ndarray] = None,
+    num_calibration_steps: int = 500,
 ) -> Dict[str, any]:
     """Quantize Optical model to INT8 using real TRAIN optical tiles."""
     if optical_float_path is None:
@@ -186,7 +191,7 @@ def quantize_optical_model(
 
     # The optical model's Input layer is uint8 (it rescales internally), so calibrate on raw uint8 tiles.
     rep_gen = build_representative_dataset_generator(
-        train_optical_images, batch_size=1, num_calibration_steps=100, dtype=np.uint8)
+        train_optical_images, batch_size=1, num_calibration_steps=num_calibration_steps, dtype=np.uint8)
     out_path = MODELS_DIR / "optical_int8.tflite"
 
     _, info = convert_model_to_full_int8(optical_float_path, rep_gen, output_tflite_path=out_path)
