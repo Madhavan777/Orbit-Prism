@@ -75,6 +75,13 @@ def main():
         w.writerow(["event", "chip", "row", "col", "split", "water_frac", "critical",
                     "cloud_frac", "sensor_used", "p_flood", "extent"])
         w.writerows(out)
+    # tiles_base.csv: the fixed per-tile inputs (no model scores). cloud_frac is still the
+    # simulated placeholder; src/cloud.py must reproduce it on real pixels (see CONTEXT.md).
+    with open(OUT.parent / "tiles_base.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["event", "chip", "row", "col", "split", "water_frac", "critical",
+                    "cloud_frac", "sensor_used"])
+        w.writerows(x[:9] for x in out)
     n_crit = sum(x[6] for x in out)
     print(f"wrote {OUT}: {len(out)} tiles, {n_crit} critical "
           f"({n_crit / len(out):.3f}), {sum(x[8] == 'radar' for x in out)} radar")

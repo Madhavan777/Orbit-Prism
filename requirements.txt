@@ -1,0 +1,13 @@
+# Versions below are the ones the data scripts were run with (Python 3.12).
+numpy==2.5.4
+pandas==3.1.0
+tifffile==2026.10.15
+imagecodecs
+
+# Add (and pin) these when you start using them:
+# matplotlib
+# scikit-learn
+# tensorflow
+# streamlit
+# plotly
+# pillow
