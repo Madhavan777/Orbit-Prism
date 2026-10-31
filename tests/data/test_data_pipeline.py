@@ -270,3 +270,23 @@ def test_orbit_prism_dataset_loader():
 
         ds_test = OrbitPrismDataset(processed_dir=tmp_dir, split="test", modality="radar")
         assert len(ds_test) == 4
+
+
+def test_optical_metadata_schema():
+    """Test data/optical_tiles.csv schema and column names."""
+    csv_path = Path("data/optical_tiles.csv")
+    if not csv_path.exists():
+        from src.data.generate_optical_metadata import generate_optical_dataset_metadata
+        df = generate_optical_dataset_metadata(out_csv=csv_path)
+    else:
+        df = pd.read_csv(csv_path)
+
+    expected_cols = [
+        "image_id", "image_path", "disaster_type", "latitude", "longitude",
+        "timestamp", "event_id", "B2", "B3", "B4", "B8",
+        "water_mask_path", "burn_mask_path", "water_fraction",
+        "burn_fraction", "cloud_fraction", "split"
+    ]
+    assert list(df.columns) == expected_cols
+    assert len(df) == 6825
+    assert set(df["split"].unique()) == {"Train", "Validation", "Test"}
