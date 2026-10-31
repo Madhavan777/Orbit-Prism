@@ -1,7 +1,10 @@
-"""Priority Downlink Scheduler Interface for ORBIT-PRISM (Akhilesh Alignment).
+"""EXPERIMENTAL priority downlink scheduler sketch for ORBIT-PRISM.
+
+Not used by the evaluation: the reference scheduler is src/scheduler (Akhilesh), with the
+L0 / L1 / L2 packet design. Packet sizes here come from src/constants.py.
 
 Handles bandwidth-constrained LEO satellite communication passes:
-  - Two-tier transmission protocol: Tier 1 (Critical Alerts <1 KB) before Tier 2 (Detailed Imagery)
+  - Two-tier transmission protocol: Tier 1 (alert, L0 size) before Tier 2 (full tile)
   - Multi-event priority ordering
   - Inter-pass carry-over buffer
   - De-duplication
@@ -14,13 +17,14 @@ from enum import Enum
 from typing import List, Dict, Set, Tuple, Optional, Any
 import pandas as pd
 
+from src.constants import L0_B, OPTICAL_B
 from src.disasters.risk_engine import RiskAssessment
 from src.disasters.registry import DisasterCategory
 
 
 class PacketTier(int, Enum):
     TIER1_ALERT = 1      # Compact alert metadata (< 1 KB)
-    TIER2_IMAGERY = 2    # Full quantized tile imagery (~25 KB - 100 KB)
+    TIER2_IMAGERY = 2    # Full tile imagery (65,536 B optical, 32,768 B radar)
 
 
 class TransmissionStatus(str, Enum):
@@ -56,9 +60,9 @@ class PassSummary:
 class PriorityScheduler:
     """Multi-disaster intelligent queue and downlink manager."""
 
-    # Nominal packet sizes for TinyML satellite transmission
-    TIER1_ALERT_SIZE_BYTES = 64        # JSON/binary telemetry packet
-    TIER2_INT8_IMAGE_BYTES = 25 * 1024 # Quantized tile payload (25 KB)
+    # Packet sizes come from the shared constants (CONTEXT.md): L0 alert and an optical tile.
+    TIER1_ALERT_SIZE_BYTES = L0_B           # 32 B alert packet
+    TIER2_INT8_IMAGE_BYTES = OPTICAL_B      # 65,536 B full optical tile (a radar tile is 32,768 B)
 
     def __init__(self, critical_threshold: float = 60.0):
         """Initialize PriorityScheduler.

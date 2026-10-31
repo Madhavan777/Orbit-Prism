@@ -14,8 +14,8 @@
   - **Specular Reflection**: Calm flood waters act as smooth specular surfaces, reflecting radar pulses away from the antenna. This results in distinct dark, low-backscatter values (typically $-22$ dB to $-16$ dB in calibrated $\sigma^0$).
   - **Diffuse / Volume Scattering**: Rough dry land, vegetation, and urban infrastructure produce high diffuse or volume backscatter (typically $-14$ dB to $-6$ dB), creating sharp contrast even through dense optical cloud cover.
 - **Dataset**: Sen1Floods11 — `S1Hand` (hand-labeled flood events).
-- **Active Scopes**: Flood detection (`data/raw/flood/`) and Forest-Fire SAR observations (`data/raw/forest_fire/`).
-- **Permanently Excluded**: Cyclone datasets and references are completely excluded from active project scope.
+- **Active Scopes**: Flood detection (Sen1Floods11 `S1Hand`, loaded). Forest fire is the second hazard but **no fire radar data is loaded yet**; whether radar helps for fire is a hypothesis to be measured.
+- **Out of scope**: hazards other than floods and forest fires (see "Scope" in CONTEXT.md).
 
 ---
 
@@ -66,7 +66,8 @@
 ---
 
 ## 5. Dataset Audit & Safety
-- **Flood Dataset**: Preserved (`data/raw/flood/`, `data/processed/flood/`).
-- **Forest-Fire Dataset**: Preserved (`data/raw/forest_fire/`, `data/processed/forest_fire/`).
-- **Cyclone Dataset**: **0** cyclone datasets, folders, samples, or active configuration lines exist in the project repository.
+- **Flood Dataset**: Sen1Floods11 hand-labelled subset, downloaded by `python scripts/download_flood.py` into `data/raw/data/flood_events/HandLabeled/` (git-ignored). Processed tiles go to `data/processed/<event>.npz`.
+- **Forest-Fire Dataset**: **not loaded.** There is no `data/raw/forest_fire/` and no fire radar data in the repository. See the Hazards section of CONTEXT.md.
+- **Out-of-scope hazards**: no code or data for them exists in the repository (checked by `test_15` on code and data files).
+- **Numbers above**: weights and activations in section 4 are the radar-only figures from an untrained architecture. The combined, regenerated table is `results/memory_table.csv`.
 

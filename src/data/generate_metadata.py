@@ -131,5 +131,5 @@ def save_tiles_base_csv(
     validate_tiles_base_dataframe(df)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
+    df.to_csv(output_path, index=False, lineterminator="\n")
     logger.info("Saved %d records to %s", len(df), output_path)

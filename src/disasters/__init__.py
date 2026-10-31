@@ -1,7 +1,8 @@
-"""ORBIT-PRISM Multi-Disaster TinyML Detection and Intelligent Prioritisation Engine.
+"""EXPERIMENTAL hazard registry, priority scoring and scheduler sketch (floods and fires only).
 
-Provides modular disaster detection models, confidence-aware risk scoring,
-and bandwidth-constrained scheduling interfaces.
+Not used by the evaluation. The reference scheduler is src/scheduler (Akhilesh) and the
+reference priority score is calibrated flood probability x flood extent. The multipliers and
+weights here are unvalidated assumptions.
 """
 
 from src.disasters.risk_engine import RiskEngine, DisasterEvent, RiskAssessment

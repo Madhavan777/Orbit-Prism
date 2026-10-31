@@ -60,30 +60,19 @@ A comprehensive 5-point unit test suite was implemented and validated:
 
 ---
 
-## 5. Multi-Disaster Extension Architecture (`src/disasters/`)
+## 5. Experimental extras (`src/disasters/`), floods and fires only
 
-As part of the research extension to extend ORBIT-PRISM into a **Multi-Disaster Detection and Intelligent Prioritisation System using TinyML**, the following modules have been implemented and verified without disturbing the operational flood anchor:
+Scope is floods and forest fires (CONTEXT.md). These modules are experiments and are **not used by the evaluation**; the reference scheduler is `src/scheduler` and the reference priority score is calibrated flood probability x flood extent.
 
-1. **Disaster Registry (`src/disasters/registry.py`):**
-   * Covers all 6 categories: Floods, Wildfires, Cyclones, Landslides, Earthquakes, Volcanic Eruptions.
-   * Maintains strict provenance for public benchmark datasets (`Sen1Floods11`, `NASA FIRMS`, `TC-PRIMED`, `Landslide4Sense`, `xBD`, `MOUNTS`).
-   * Explicitly categorizes modules into **Implemented**, **Simulated**, **Planned**, and **Unverified**.
+1. **Hazard registry (`registry.py`):** two profiles, flood and wildfire. Statuses describe what is in the repo: flood is `SIMULATED` (architecture and tests, not trained or evaluated on real data), wildfire is `PLANNED` (no fire data is loaded). Nothing is `IMPLEMENTED` yet. The Sen1Floods11 licence is recorded as unconfirmed.
+2. **Priority engine (`risk_engine.py`):** an experimental confidence-aware priority formula. Its weights and per-hazard urgency multipliers are unvalidated assumptions. Missing exposure is flagged `UNKNOWN` instead of being treated as zero.
+3. **Scheduler sketch (`scheduler_interface.py`):** a two-tier queue (32 B alert before a full tile) using the packet sizes in `src/constants.py`, with carry-over and de-duplication. Its CSV exporter also writes the team `tile_id,p_flood,extent` format.
+4. **Wildfire architecture (`wildfire.py`):** an untrained 6,338-parameter network (24.76 KB float32) plus an NBR formula. It has not seen any data.
+5. **Tests:** `tests/test_optical.py` and `tests/test_multi_disaster.py` run in a clean environment; `tests/test_training_data_guards.py` checks that training reads every event and never touches the holdout.
 
-2. **Confidence-Aware Risk Engine (`src/disasters/risk_engine.py`):**
-   * Implements multi-attribute priority formulation:
-     $$R_i = C_i \times \Big[ w_1 \cdot \big( P(\text{Event}_i) \times S_i \big) + w_2 \cdot \big( A_i \times E_i \big) \Big] \times \Omega(\text{Urgency}_i)$$
-   * Missing demographic/infrastructure exposure is explicitly flagged as `UNKNOWN` ($E_i = 0.5$ uncertain potential risk with lowered confidence) rather than assumed zero risk.
-   * Dynamically degrades optical confidence under heavy cloud coverage ($\text{cloud\_frac}$).
+## 6. Data and outputs
 
-3. **Intelligent Priority Scheduler (`src/disasters/scheduler_interface.py`):**
-   * Two-Tier LEO downlink protocol: **Tier 1 (Critical Alerts < 1 KB)** transmitted before **Tier 2 (Quantized Imagery ~25 KB)**.
-   * Full inter-pass carry-over queue and de-duplication across ground station passes.
-   * Backward-compatible CSV exporter supporting both Madhavan's legacy flood schema (`tile_id,p_flood,extent`) and the extended multi-disaster schema.
-
-4. **Dedicated TinyML Models:**
-   * **Wildfire (`src/disasters/wildfire.py`):** 6,338 parameters, **24.76 KB FP32** (Budget: $\le 60$ KB), dual-head (`p_fire`, `burn_extent`), plus NBR baseline.
-   * **Cyclone (`src/disasters/cyclone.py`):** 3,250 parameters, **12.70 KB FP32** (Budget: $\le 120$ KB), depthwise-separable conv layers, dual-head (`p_cyclone`, `intensity_score`).
-
-5. **Combined Verification Suite (`tests/`):**
-   * Total 13 tests passed cleanly (`tests/test_optical.py` + `tests/test_multi_disaster.py`).
-
+* `scripts/train.py` and `scripts/predict.py` read **all** event files in `data/processed/` through `OrbitPrismDataset`, using the split names `train / valid / test / holdout`. Training uses `train` tiles with `cloud_frac < 0.5`; `valid` is the calibration set; `holdout` (Bolivia) is never read for training or calibration.
+* `scripts/predict.py` writes `results/scores_optical_float.csv` (`tile_id,p_flood,extent`, `tile_id = <chip>_<row>_<col>`). The contract file `results/scores_optical_int8.csv` comes from the INT8 model (`src/compress/predict_int8.py`).
+* Early stopping monitors the `valid` split, which is also the calibration split. That is a small optimistic bias for the miss-rate dial; a separate early-stopping slice would remove it.
+* The earlier dry-run scores and model file (made on random synthetic data) were removed from `results/` and `models/` so they cannot be mistaken for results.

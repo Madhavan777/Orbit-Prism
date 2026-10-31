@@ -1,60 +1,54 @@
-# ORBIT-PRISM Datasets Reference: Flood & Forest Fire
+# ORBIT-PRISM Datasets Reference: Flood and Forest Fire
 
-This document outlines the official datasets integrated into the ORBIT-PRISM visual triage architecture across flood detection (primary hackathon benchmark) and forest-fire mapping (multi-hazard generalization).
+Scope is floods (primary, measured) and forest fires (second hazard). No other hazard is in scope (see "Scope" in CONTEXT.md).
+
+**Status key:** LOADED = files are in use by the code today. NOT LOADED = chosen or listed, but no data has been downloaded or processed for it.
 
 ---
 
-## 1. Flood Detection Datasets (Active Prototype)
+## 1. Flood detection: Sen1Floods11 v1.1 hand-labelled subset (LOADED)
 
-The primary worked example for ORBIT-PRISM PS 1.4 is flood triage using the **Sen1Floods11 v1.1 Hand-Labelled Benchmark**.
-
-| No. | Dataset / Layer | Modality / Sensor | Purpose in ORBIT-PRISM | Local Location |
+| No. | Dataset / layer | Sensor | Purpose | Location after `python scripts/download_flood.py` |
 |---|---|---|---|---|
-| **1** | **`S1Hand`** | Sentinel-1 SAR (IW mode, GRD) | Dual-polarization radar inputs (VV + VH), cloud-penetrating imagery | `data/raw/data/flood_events/HandLabeled/S1Hand/` |
-| **2** | **`S2Hand`** | Sentinel-2 MSI (Level-1C) | Multispectral optical inputs (B2 Blue, B3 Green, B4 Red, B8 NIR) | `data/raw/data/flood_events/HandLabeled/S2Hand/` |
-| **3** | **`LabelHand`** | QC Ground Truth Mask | Hand-labelled pixel masks (-1: no-data, 0: not water, 1: water) | `data/raw/data/flood_events/HandLabeled/LabelHand/` |
-| **4** | **`JRCWaterHand`** | JRC Global Surface Water | Permanent water occurrence layer; subtracted to isolate flood water | `data/raw/data/flood_events/HandLabeled/JRCWaterHand/` |
-| **5** | **Official Split CSVs** | Metadata | Defines Train, Validation, Test, and Bolivia holdout sets | `data/raw/splits/flood_handlabeled/` |
-| **6** | **Sen1Floods11 Metadata** | GeoJSON STAC catalog | Event acquisition dates (`s1_date`, `s2_date`), orbits, and bounds | `data/raw/Sen1Floods11_Metadata.geojson` |
+| 1 | `S1Hand` | Sentinel-1 SAR (IW, GRD) | Radar input (VV, VH), unaffected by cloud | `data/raw/data/flood_events/HandLabeled/S1Hand/` (imagery download: `--imagery`) |
+| 2 | `S2Hand` | Sentinel-2 MSI (Level-1C) | Optical input (B2, B3, B4, B8) | `data/raw/data/flood_events/HandLabeled/S2Hand/` (imagery download: `--imagery`) |
+| 3 | `LabelHand` | Hand-labelled masks | -1 no data, 0 not water, 1 water | `data/raw/data/flood_events/HandLabeled/LabelHand/` |
+| 4 | `JRCWaterHand` | JRC surface water | Permanent water, subtracted to isolate flood water | `data/raw/data/flood_events/HandLabeled/JRCWaterHand/` |
+| 5 | Official split CSVs | Metadata | train / valid / test, plus the Bolivia held-out event | `data/raw/splits/flood_handlabeled/` |
+| 6 | `Sen1Floods11_Metadata.geojson` | Metadata | Event acquisition dates | `data/raw/Sen1Floods11_Metadata.geojson` |
 
-**Source:** Google Cloud Storage `gs://sen1floods11/v1.1/` & [Cloud to Street Sen1Floods11 GitHub](https://github.com/cloudtostreet/Sen1Floods11)  
-**Processed Outputs:**
-- Compressed Arrays: `data/processed/<event>.npz` (`tile_id`, `optical`, `radar`, `water_frac`, `cloud_frac`, `split`, `critical`)
-- Radar Metadata: [`data/radar_tiles.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/radar_tiles.csv)
-- Optical Metadata: [`data/optical_tiles.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/optical_tiles.csv)
-- Base Telemetry: [`data/tiles_base.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/tiles_base.csv) and [`data/tiles.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/tiles.csv)
+Source: `gs://sen1floods11/v1.1/` and [cloudtostreet/Sen1Floods11](https://github.com/cloudtostreet/Sen1Floods11). Licence: none is stated on the GitHub repository, so treat it as unconfirmed and keep the credit "contains modified Copernicus Sentinel data".
+
+Generated files (all derived from the above plus simulated clouds):
+- `results/real_water_stats.csv`: real per-tile water fractions (`scripts/real_stats.py`).
+- `data/tiles_base.csv`: per-tile inputs with simulated `cloud_frac` and `sensor_used` (`scripts/build_tiles_base.py`).
+- `data/optical_tiles.csv`, `data/radar_tiles.csv`: per-tile index files for the optical and radar developers (`python -m src.data.generate_optical_metadata`, `python -m src.data.generate_radar_metadata`). Split values are `train / valid / test / holdout`.
+- `data/processed/<event>.npz`: tile arrays, git-ignored, made by the pixel pipeline in `src/data/` once the imagery is downloaded.
+
+All clouds are SIMULATED. Sen1Floods11 has no cloud mask.
 
 ---
 
-## 2. Forest-Fire Datasets (Multi-Hazard Extension)
+## 2. Forest fire (NOT LOADED)
 
-For broader mission generalization (monitoring wildfires, active fire fronts, and post-fire burn severity through dense smoke plumes), the ORBIT-PRISM system accommodates the following standard Earth Observation datasets:
+**No fire data has been downloaded or processed.** The optical and radar index files contain flood and normal tiles only; `burn_mask_path` is empty and `burn_fraction` is 0. The sources below are the plan, not an integrated dataset.
 
-| No. | Dataset | Sensor / Source | Spatial / Temporal Resolution | Purpose in ORBIT-PRISM |
+| No. | Source | What it provides (from its catalogue page) | Intended use | Caveats |
 |---|---|---|---|---|
-| **1** | **NASA FIRMS VIIRS 375m** | Suomi-NPP / NOAA-20 VIIRS | 375 m ground resolution, near-real-time active hotspots | Rapid L0 alert packet trigger ($32\text{ B}$ packet) for thermal anomalies |
-| **2** | **ESA FireCCI51** | MODIS / Sentinel-3 OLCI | 250 m pixel resolution, global burned-area masks | Ground truth training masks for burned-area segmentation (`burn_mask_path`, `burn_fraction`) |
-| **3** | **Sentinel-1 SAR VV/VH** | Sentinel-1 C-Band SAR | 10 m resolution, cloud- and smoke-penetrating radar | Primary radar input: detects surface roughness changes and canopy destruction through heavy smoke plumes |
-| **4** | **Sentinel-2 MSI Imagery** | Sentinel-2 MSI | 10–20 m resolution, SWIR bands (B11, B12) + NIR (B8) | Optical triage: Normalized Burn Ratio (NBR = (B8 - B12) / (B8 + B12)) and dNBR burn severity |
-| **5** | **ESA CCI Land Cover** | MERIS / Sentinel-3 | 300 m resolution, global vegetation / biome classes | Eliminates false alarms by masking non-burnable water, bare rock, and snow surfaces |
+| 1 | NASA FIRMS VIIRS 375 m | Active-fire point detections (location, brightness temperature, fire radiative power, confidence 0 to 2) | Hotspot context | Points, not burned-area masks; open data, acknowledgement required |
+| 2 | ESA FireCCI51 | Monthly global burned area from MODIS at about 250 m | Tile-level `burn_frac` labels | About 5x5 label pixels per 128x128 tile at 10 m; coverage years must overlap the Sentinel-2 era; terms not yet read in full |
+| 3 | Sentinel-1 SAR (Copernicus Data Space) | C-band radar, VV and VH | Radar input | Whether radar helps for fire is a hypothesis to be measured, not a result |
+| 4 | Sentinel-2 MSI (Copernicus Data Space) | Optical bands including SWIR (B11, B12) | Optical input; burn index (NBR = (B8 - B12) / (B8 + B12)) | Can be filtered by cloud cover; real clouds, unlike the simulated flood clouds |
+| 5 | ESA CCI Land Cover | Land-cover classes at about 300 m | Masking non-burnable surfaces | Not yet used |
 
-**External Repositories & Access:**
-- NASA FIRMS: [https://firms.modaps.eosdis.nasa.gov/](https://firms.modaps.eosdis.nasa.gov/)
-- ESA FireCCI: [https://climate.esa.int/en/projects/fire/](https://climate.esa.int/en/projects/fire/)
-- Copernicus Data Space Ecosystem: [https://dataspace.copernicus.eu/](https://dataspace.copernicus.eu/)
+Verified fallback: the Torino Satellite Burned Area Dataset (Zenodo 10.5281/zenodo.6597139, CC BY 4.0, 14 GB). Only part 5 has been inspected; see the Hazards section of CONTEXT.md.
+
+External pages: [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/), [ESA Fire CCI](https://climate.esa.int/en/projects/fire/), [Copernicus Data Space](https://dataspace.copernicus.eu/).
 
 ---
 
-## 3. Schema Alignment Across Optical and Radar Modules
+## 3. Shared tile geometry
 
-Both modules share unified tile geometries:
-- Chip dimensions: $512 \times 512$ pixels
-- Grid: $4 \times 4 = 16$ tiles per chip
-- Tile size: $128 \times 128$ pixels
-- Telemetry payload:
-  - Optical tile: $128 \times 128 \times 4\text{ B} = 65,536\text{ Bytes}$
-  - Radar tile: $128 \times 128 \times 2\text{ B} = 32,768\text{ Bytes}$
-- Disaster types supported in schemas: `Flood`, `Wildfire`, `Normal`
-- Shared metadata files:
-  - Optical: [`data/optical_tiles.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/optical_tiles.csv)
-  - Radar: [`data/radar_tiles.csv`](file:///Users/agnelvishwakamalraj/conscientia_2k26/data/radar_tiles.csv)
+- Chip 512x512 px, cut into a 4x4 grid of 128x128 tiles (flood chips only; fire areas have their own grid size).
+- Payload: optical 128x128x4 bytes = 65,536 B; radar 128x128x2 bytes = 32,768 B.
+- Alert packet (L0): 32 B. The preview size (L1) is provisional at 2,048 B in `src/data/generate_metadata.py`; the scheduler owner confirms it in `src/constants.py`.

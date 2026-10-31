@@ -36,6 +36,11 @@ from src.models.optical import (
 )
 
 
+# Split names from CONTEXT.md. "val"/"cal"/"calibration" are accepted aliases for the calibration set.
+TRAIN_SPLITS = {"train"}
+CAL_SPLITS = {"valid", "val", "cal", "calibration"}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Optical Flood Model")
     parser.add_argument("--data_dir", type=str, default="data/processed", help="Path to processed NPZ files")
@@ -137,33 +142,37 @@ def train():
         print("  python scripts/train.py --dry_run")
         return
 
-    # 2. Data Loading & Dynamic Key Discovery
+    # 2. Data loading: ALL event files, with explicit split labels from the pipeline
     if npz_files:
-        print(f"\nLoading Agnel's processed dataset from {len(npz_files)} file(s)...")
-        npz_path = npz_files[0]
-        data = np.load(npz_path, allow_pickle=True)
-        key_map = discover_npz_keys(data)
-        print(f"Discovered Key Mapping: {key_map}")
+        from src.data.dataset import OrbitPrismDataset
 
-        images = data[key_map.get("images", "images")]
-        water_frac = data[key_map.get("water_frac", "water_frac")]
-        cloud_frac = data[key_map.get("cloud_frac", "cloud_frac")] if "cloud_frac" in key_map else np.zeros(len(images))
-        splits = data[key_map.get("split", "split")] if "split" in key_map else np.array(["train"] * len(images))
-        events = data[key_map.get("event_id", "event_id")] if "event_id" in key_map else np.array(["event_0"] * len(images))
+        print(f"\nLoading the processed dataset from {len(npz_files)} event file(s) in {data_dir}...")
+        ds = OrbitPrismDataset(processed_dir=data_dir, split="all", modality="optical")
+        images = ds.optical
+        water_frac = ds.water_frac
+        cloud_frac = ds.cloud_frac
+        splits_str = np.char.lower(ds.split.astype(str))
 
         # Binary critical flood label: water_frac >= 0.30
         p_flood = (water_frac >= args.critical_flood_threshold).astype(np.float32).reshape(-1, 1)
         extent = water_frac.astype(np.float32).reshape(-1, 1)
 
-        # Split masks
-        splits_str = np.char.lower(splits.astype(str))
-        train_mask = (splits_str == "train") & (cloud_frac < args.cloud_threshold)
-        cal_mask = (splits_str == "cal") | (splits_str == "val")
+        # Split masks use the CONTEXT.md names: train / valid / test / holdout.
+        # The held-out event (holdout) must never reach training or calibration.
+        train_mask = np.isin(splits_str, list(TRAIN_SPLITS)) & (cloud_frac < args.cloud_threshold)
+        cal_mask = np.isin(splits_str, list(CAL_SPLITS))
+        assert not np.isin(splits_str[train_mask | cal_mask], ["holdout"]).any(), "holdout leaked into train/cal"
+        if train_mask.sum() == 0:
+            raise SystemExit(f"No training tiles found; split values present: {sorted(set(splits_str))}")
+        if cal_mask.sum() == 0:
+            raise SystemExit("The calibration set is empty; expected split 'valid' "
+                             f"(accepted: {sorted(CAL_SPLITS)}); split values present: {sorted(set(splits_str))}")
 
         x_train, y_train_p, y_train_e = images[train_mask], p_flood[train_mask], extent[train_mask]
         x_cal, y_cal_p, y_cal_e = images[cal_mask], p_flood[cal_mask], extent[cal_mask]
         print(f"TRAIN Set (cloud_frac < {args.cloud_threshold}): {len(x_train)} samples")
         print(f"CAL/VAL Set: {len(x_cal)} samples")
+        print(f"HOLDOUT tiles present and untouched: {int((splits_str == 'holdout').sum())}")
 
     else:
         # Dry Run Mode with Synthetic Data

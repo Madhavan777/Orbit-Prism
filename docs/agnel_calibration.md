@@ -11,7 +11,9 @@ In the ORBIT-PRISM visual triage architecture, satellite image tiles must be pri
 
 To enable satellite operators to make principled trade-offs, the calibration system provides two critical stages:
 1. **Isotonic Probability Calibration:** Maps uncalibrated model scores (optical and radar) into empirical probabilities of critical flooding.
-2. **Split-Conformal Miss-Rate Dial:** Selects decision thresholds that provably control the critical-tile miss rate to at most a target $\alpha \in \{1\%, 5\%, 10\%\}$ on exchangeable data.
+2. **Split-Conformal Miss-Rate Dial:** Selects decision thresholds that bound the expected critical-tile miss rate by a target $\alpha \in \{1\%, 5\%, 10\%\}$ **when the test tiles are exchangeable with the calibration tiles**. The Bolivia held-out event is a different event and may not be exchangeable, so the miss rate actually achieved there is measured and reported, never assumed.
+
+**Thresholds are in raw `p_flood` units.** The dial runs on the raw model score, so the rule `keep_tile if p_flood >= threshold` in `calibration.json` is literally what to apply. The isotonic map is used for calibrated probabilities (for example the priority score), and its knots are saved in the JSON.
 
 ---
 
@@ -37,6 +39,7 @@ The optical and radar sensing modalities face fundamentally different error stru
     $$\text{ECE} = \sum_{m=1}^{M} \frac{|B_m|}{N} \left| \text{acc}(B_m) - \text{conf}(B_m) \right|$$
   - **Brier Score:**
     $$\text{Brier} = \frac{1}{N} \sum_{i=1}^{N} (p_i - y_i)^2$$
+  - **These are in-sample.** They are computed on the tiles the isotonic map was fitted on, so ECE is about 0 by construction. The JSON stores them as `probability_calibration_metrics_in_sample`. A real calibration claim needs the same metrics on held-out tiles.
 - **Integration Function:**
   ```python
   from src.calibration.calibrate import apply
@@ -69,8 +72,8 @@ $$k = \left\lfloor (n + 1) \cdot \alpha \right\rfloor$$
    - For $\alpha = 0.05$, requires $n \ge 19$.
    - For $\alpha = 0.10$, requires $n \ge 9$.
    - When $k = 0$, index $k - 1 = -1$ is invalid.
-   - **Conservative Fallback:** The threshold is set to $s_{(1)}$ (index 0, the minimum critical calibration score) or $0.0$. This ensures the miss rate remains $\le \alpha$ (0 missed in calibration).
-   - The condition is explicitly logged and recorded in `results/calibration.json` with status `"conservative_fallback"`.
+   - **Conservative Fallback:** The threshold is set to $0.0$, i.e. **keep every tile** (no bandwidth saving, miss rate 0). Using the minimum critical score $s_{(1)}$ instead would NOT be safe: a new critical tile falls below $s_{(1)}$ with probability $1/(n+1)$, which is larger than $\alpha$ whenever $n + 1 < 1/\alpha$ (for example 1.8% against a 1% target at $n = 54$).
+   - The condition is logged and recorded in `results/calibration.json` with status `"conservative_fallback"`.
 2. **$n = 0$ (Empty critical set):**
    - Status set to `"unavailable"`, threshold defaults to 0.0 with warning.
 
@@ -78,29 +81,22 @@ $$k = \left\lfloor (n + 1) \cdot \alpha \right\rfloor$$
 
 ## 5. Output Specification (`results/calibration.json`)
 
-The output matches the team file contract specified in CONTEXT.md:
+The output matches the team file contract in CONTEXT.md. **The numbers below are made up to show the shape of the file; they are not results.**
 ```json
 {
   "version": 1,
   "calibration_split": "valid",
   "method": "split_conformal",
-  "optical": {
-    "0.01": 0.3542,
-    "0.05": 0.4812,
-    "0.1": 0.5510
-  },
-  "radar": {
-    "0.01": 0.2814,
-    "0.05": 0.4120,
-    "0.1": 0.4950
-  },
-  "critical_calibration_tiles": {
-    "optical": 48,
-    "radar": 54
-  },
-  "decision_rule": "keep_tile if p_flood >= threshold"
+  "optical": {"0.01": 0.0, "0.05": 0.4812, "0.1": 0.5510},
+  "radar":   {"0.01": 0.0, "0.05": 0.4120, "0.1": 0.4950},
+  "critical_calibration_tiles": {"optical": 48, "radar": 54},
+  "decision_rule": "keep_tile if p_flood >= threshold",
+  "threshold_score_space": "raw_p_flood",
+  "score_source": "real_model_predictions (scores_optical_int8.csv + scores_radar_int8.csv)",
+  "isotonic_knots": {"optical": {"x": [], "y": []}, "radar": {"x": [], "y": []}}
 }
 ```
+`score_source` says what the scores were. A file whose `score_source` starts with `synthetic_placeholder` came from a plumbing test and must not be used for results. `python -m src.calibration.calibrate` refuses to run without real scores unless `--allow-placeholder` is passed, and `results/calibration.json` is not committed until it is made from real scores.
 
 ---
 
@@ -108,13 +104,14 @@ The output matches the team file contract specified in CONTEXT.md:
 
 - **Test Set:** `Bolivia` (`split == "holdout"`, 15 chips, 231 tiles, 42 critical flood tiles).
 - **Strict Isolation:** Bolivia data is never used to fit isotonic regression, select conformal thresholds, or adjust hyperparameters.
-- **Reporting Format:**
+- **Reporting Format** (layout only; these rows are invented to show the columns, not measured):
   ```
   Path    | Target | Achieved | Critical count | Missed count | Threshold
-  Optical | 1%     | 0.00%    | 12             | 0            | 0.3542
+  Optical | 1%     | 0.00%    | 12             | 0            | 0.0000
   Optical | 5%     | 4.17%    | 12             | 0            | 0.4812
   ...
   ```
+  Report the achieved miss rate exactly as measured, including when it exceeds the target.
 
 ---
 

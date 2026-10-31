@@ -21,8 +21,11 @@ Python 3.10 to 3.12.
 ```bash
 python scripts/download_flood.py    # labels + JRC + splits (3 MB); add --imagery for 1.7 GB more
 python scripts/real_stats.py        # needs data/raw labels; writes results/real_water_stats.csv
-python scripts/make_fake_data.py    # writes data/fake_tiles.csv (synthetic, see data/README.md)
+python scripts/build_tiles_base.py  # writes data/tiles_base.csv (real labels + simulated clouds)
+python scripts/make_fake_data.py    # writes data/fake_tiles.csv (synthetic scores, see data/README.md)
 python scripts/baselines.py         # baselines on the Bolivia held-out event
+python scripts/check_merge.py       # merge gate: run before asking for a merge
+python -m pytest tests -q          # full test suite
 ```
 
 `results/real_water_stats.csv` is committed, so you only need the raw download for `real_stats.py` and for anything using imagery.

@@ -70,7 +70,14 @@ class Int8ModelRunner:
             )
 
     def quantize_input(self, float_img: np.ndarray) -> np.ndarray:
-        """Quantize float in [0.0, 1.0] to int8 using scale and zero_point."""
+        """Prepare one input for the interpreter.
+
+        int8-input models (radar): quantize float in [0.0, 1.0] using scale and zero_point.
+        uint8-input models (optical): the model rescales internally, so pass raw tile values
+        in [0, 255]; they are only rounded and clipped here.
+        """
+        if self.inp_detail["dtype"] == np.uint8:
+            return np.clip(np.round(float_img), 0, 255).astype(np.uint8)
         q = np.round(float_img / self.inp_scale) + self.inp_zero_point
         return np.clip(q, -128, 127).astype(np.int8)
 
@@ -173,7 +180,7 @@ def run_radar_int8_predictions(
             "extent": ext_preds,
         }
     )
-    res_df.to_csv(out_csv, index=False)
+    res_df.to_csv(out_csv, index=False, lineterminator="\n")
     validate_scores_csv(out_csv)
 
     return {
@@ -216,7 +223,7 @@ def run_optical_int8_predictions(
             "extent": ext_preds,
         }
     )
-    res_df.to_csv(out_csv, index=False)
+    res_df.to_csv(out_csv, index=False, lineterminator="\n")
     validate_scores_csv(out_csv)
 
     return {

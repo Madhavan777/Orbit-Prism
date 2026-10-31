@@ -51,3 +51,31 @@ Scope is floods and forest fires only (see "Scope" in CONTEXT.md). Consequences:
 1. Agnel: items 1 to 4 first (they change `sensor_used`, which everyone downstream depends on). Tell Shenbaga and Harish when `tiles_base.csv` is regenerated.
 2. Shenbaga and Harish: fix the contract mismatches, then train on the regenerated data.
 3. Everyone: rebase on `main`, run `python -m pytest tests -q`, then ask for a re-check.
+
+---
+
+## Resolution (Madhavan, same day): fixes applied on `madhavan/integrate`
+
+The three branches were merged (authorship kept) and the blockers above were fixed in place, because the team was waiting. Authors: please pull `main` and review these changes to your code.
+
+**Agnel**
+- `data/tiles.csv` and `results/calibration.json` (both made from synthetic scores) are removed. `scripts/merge_scores.py` and `python -m src.calibration.calibrate` now refuse to run without real scores; `--allow-placeholder` is for plumbing tests and writes to a git-ignored file or marks `score_source`.
+- Clouds: new `scripts/build_tiles_base.py` regenerates `data/tiles_base.csv` with the `cloud_frac` your cloud simulation really gives the pixels (the old file said Bolivia_103757 tile (0,2) was 95% cloud; your function gives 38%). `make_fake_data.py` now reads clouds from it, and a test checks the match.
+- Splits: the optical and radar index files use `train / valid / test / holdout`, so Bolivia stays separate. `OrbitPrismDataset(split="test")` no longer includes the holdout.
+- Calibration: thresholds were computed on isotonic probabilities but documented as raw `p_flood` thresholds; they are now computed on raw `p_flood`. The small-sample fallback now keeps every tile (threshold 0) because the minimum critical score does not bound the miss rate. ECE/Brier are saved as in-sample, and the isotonic knots are saved in the JSON.
+- Event dates: `Sen1Floods11_Metadata.geojson` is now downloaded by `scripts/download_flood.py`.
+- Windows: NPZ files are closed after loading (fixes the failing test); CSVs are written with LF.
+- Docs: machine-specific links removed, invented numbers labelled, fire marked NOT LOADED, FireCCI and radar-through-smoke wording corrected.
+
+**Harish**
+- `results/memory_table.csv` now has the contract columns and measured values (untrained-architecture basis; `recall` and `ece` stay `NOT_MEASURED`). The profiler classified a 256 KB float copy of the tile as "weights"; it now reads constants from the TFLite file. Optical INT8 peak activation is 327,680 B because its Rescaling layer runs in float.
+- The quantizer and INT8 runner accept the optical model's `uint8` input; the calibration helper takes a dtype.
+- Notes no longer claim fire folders that do not exist. `test_15` scans code and data files only. The radar loader reads all per-event NPZ files through `OrbitPrismDataset`.
+
+**Shenbaga**
+- Registry cut to flood (`SIMULATED`) and wildfire (`PLANNED`, fire data NOT LOADED); licence recorded as unconfirmed. `cyclone.py` and the other hazards are removed with their tests. The risk/scheduler code is labelled experimental, with packet sizes from `src/constants.py`.
+- The dry-run `results/scores_optical.csv` and `models/optical_float.keras` are removed. `predict.py` writes `results/scores_optical_float.csv`, or a git-ignored synthetic template when there is no data.
+- `train.py` and `predict.py` read every event file (they read only `npz_files[0]`, which is Bolivia, the holdout), use the `train / valid / test / holdout` names, stop if the calibration set is empty, and assert the holdout never reaches training or calibration. New tests cover this.
+- `requirements.txt` pinned again with the new packages.
+
+**New:** `scripts/check_merge.py` is the automated merge gate (BOM, line endings, forbidden files, banned claims, out-of-scope hazards, CSV contracts, provenance). Run it and `python -m pytest tests -q` before asking for a merge.

@@ -60,16 +60,15 @@ def evaluate_heldout(
 
     logger.info("Evaluating on held-out test event '%s' (%d tiles)", test_event_name, len(test_df))
 
-    # Apply calibrated probability transformation
-    test_df_cal = pipeline.apply(test_df, score_col=score_col, sensor_col=sensor_col, out_col="p_calibrated")
-
+    # Thresholds are in RAW p_flood units (see calibration.json: threshold_score_space), so the
+    # held-out check compares the raw score, exactly as a downstream consumer would.
     records = []
     detailed = {}
 
     for path in ["optical", "radar"]:
-        path_df = test_df_cal[test_df_cal[sensor_col] == path]
+        path_df = test_df[test_df[sensor_col] == path]
         path_crit = path_df[label_col].values
-        path_scores = path_df["p_calibrated"].values
+        path_scores = path_df[score_col].values
 
         n_total_crit = int((path_crit == 1).sum())
         detailed[path] = {}
@@ -117,15 +116,24 @@ def print_evaluation_table(summary_df: pd.DataFrame) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Evaluate ORBIT-PRISM calibration on held-out test event.")
     parser.add_argument("--input", type=Path, default=None, help="Tiles CSV with scores (optional)")
+    parser.add_argument("--allow-placeholder", action="store_true",
+                        help="Allow synthetic placeholder scores (plumbing test only).")
     args = parser.parse_args()
 
     from src.calibration.calibrate import load_dataset_for_calibration
     if args.input is not None and args.input.exists():
         df = pd.read_csv(args.input)
+        source = f"manual_input ({args.input.name})"
     else:
-        df, _ = load_dataset_for_calibration()
+        df, source = load_dataset_for_calibration()
+
+    if source.startswith("synthetic_placeholder"):
+        if not args.allow_placeholder:
+            raise SystemExit("Real model scores not found. Pass --allow-placeholder to test the plumbing only.")
+        print("*** SYNTHETIC PLACEHOLDER SCORES: these numbers are NOT results. ***")
 
     pipeline = CalibrationPipeline()
+    pipeline.score_source = source
     pipeline.fit_and_calibrate(df)
 
     summary_df, _ = evaluate_heldout(pipeline, df)

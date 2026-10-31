@@ -83,6 +83,9 @@ class CalibrationPipeline:
         self.is_calibrated = False
         self.calibration_split_name = "valid"
         self.calibration_events: List[str] = []
+        # Where the scores came from; written into calibration.json so a calibration fitted on
+        # placeholder scores can never be mistaken for a real one.
+        self.score_source = "unspecified"
 
     def fit_and_calibrate(
         self,
@@ -139,10 +142,12 @@ class CalibrationPipeline:
             out_col="p_calibrated",
         )
 
-        # 2. Calibrate split-conformal miss-rate dial on critical calibration tiles
+        # 2. Calibrate split-conformal miss-rate dial on critical calibration tiles.
+        # The dial uses the RAW score, so thresholds are in raw p_flood units and the rule
+        # "keep_tile if p_flood >= threshold" in calibration.json is literally true.
         self.conformal_dial.calibrate(
             df_calibrated,
-            score_col="p_calibrated",
+            score_col=score_col,
             label_col=label_col,
             sensor_col=sensor_col,
             split_col=split_col,
@@ -195,7 +200,14 @@ class CalibrationPipeline:
             "score_direction": "higher_score_indicates_greater_flood_probability",
             "threshold_convention": "k_th_smallest_critical_score (1-based k = floor((n+1)*alpha))",
             "decision_rule": "keep_tile if p_flood >= threshold",
-            "probability_calibration_metrics": self.isotonic_calibrator.metrics,
+            "threshold_score_space": "raw_p_flood",
+            "score_source": self.score_source,
+            "probability_calibration_metrics_in_sample": self.isotonic_calibrator.metrics,
+            "probability_calibration_metrics_note": (
+                "Computed on the same tiles the isotonic map was fitted on, so ECE is optimistic "
+                "(about 0 by construction). Report held-out values separately."
+            ),
+            "isotonic_knots": self.isotonic_calibrator.export_knots(),
             "conformal_diagnostics": self.conformal_dial.metadata,
         }
         return out
@@ -204,7 +216,7 @@ class CalibrationPipeline:
         """Save calibration data to JSON."""
         data = self.to_dict()
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
+        with open(output_path, "w", newline="\n") as f:
             json.dump(data, f, indent=2)
         logger.info("Saved calibration configuration to %s", output_path)
 
@@ -239,6 +251,11 @@ def main():
     parser = argparse.ArgumentParser(description="ORBIT-PRISM Calibration Pipeline.")
     parser.add_argument("--input", type=Path, default=None, help="Input prediction CSV (optional)")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_JSON, help="Output calibration.json")
+    parser.add_argument(
+        "--allow-placeholder", action="store_true",
+        help="Allow fitting on synthetic placeholder scores (data/fake_tiles.csv). The output is "
+             "marked score_source=synthetic_placeholder and must never be used for results.",
+    )
     args = parser.parse_args()
 
     if args.input is not None and args.input.exists():
@@ -247,8 +264,16 @@ def main():
     else:
         df, source_name = load_dataset_for_calibration()
 
+    if source_name.startswith("synthetic_placeholder") and not args.allow_placeholder:
+        raise SystemExit(
+            "Real model scores not found (results/scores_optical_int8.csv and "
+            "results/scores_radar_int8.csv). Refusing to calibrate on synthetic placeholder scores. "
+            "Pass --allow-placeholder to test the pipeline only."
+        )
+
     logger.info("Running calibration on: %s (%d rows)", source_name, len(df))
     pipe = CalibrationPipeline()
+    pipe.score_source = source_name
     pipe.fit_and_calibrate(df)
     pipe.save_json(args.output)
     print(f"Calibration successfully completed and saved to {args.output}")

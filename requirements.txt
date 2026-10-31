@@ -1,11 +1,19 @@
-# Core data & processing
-numpy
-pandas
-tifffile
-imagecodecs
+# Pinned to the versions the full test suite passed with (Python 3.12).
+# Core data and processing
+numpy==2.5.4
+pandas==3.1.0
+tifffile==2026.10.15
+imagecodecs==2026.10.10
+scipy==1.18.1
 
-# ML, Evaluation & Testing (Shenbaga / Optical)
-tensorflow
-scikit-learn
-matplotlib
-pytest
+# Models, calibration, evaluation, tests
+tensorflow==2.21.0
+keras==3.15.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+pytest==9.2.0
+
+# Add (and pin) these when you start using them:
+# streamlit
+# plotly
+# pillow

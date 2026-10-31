@@ -4,6 +4,8 @@ data/processed/
 *.tif
 *.tiff
 results/fire/real_burn_stats.csv
+# plumbing-test output made with synthetic scores; never a result
+data/tiles_placeholder.csv
 __pycache__/
 *.pyc
 .venv/
@@ -12,3 +14,4 @@ venv/
 .env*
 .DS_Store
 .pytest_cache/
+data/_synthetic_template_scores_optical.csv

@@ -24,7 +24,8 @@ RAW = ROOT / "data" / "raw"
 API = "https://storage.googleapis.com/storage/v1/b/sen1floods11/o"
 FILE = "https://storage.googleapis.com/sen1floods11/"
 HAND = "v1.1/data/flood_events/HandLabeled/"
-SMALL = [HAND + "LabelHand/", HAND + "JRCWaterHand/", "v1.1/splits/flood_handlabeled/"]
+SMALL = [HAND + "LabelHand/", HAND + "JRCWaterHand/", "v1.1/splits/flood_handlabeled/",
+         "v1.1/Sen1Floods11_Metadata.geojson"]  # event dates, used by src/data/generate_*_metadata.py
 IMAGERY = [HAND + "S1Hand/", HAND + "S2Hand/"]
 
 

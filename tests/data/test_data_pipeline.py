@@ -268,18 +268,18 @@ def test_orbit_prism_dataset_loader():
         assert ds_train.vh.shape == (4, 128, 128)
         assert ds_train.critical.sum() == 4
 
+        # The held-out event must be requested as "holdout"; "test" must not leak it in.
+        ds_hold = OrbitPrismDataset(processed_dir=tmp_dir, split="holdout", modality="radar")
+        assert len(ds_hold) == 4
+        assert set(ds_hold.event) == {"EventB"}
         ds_test = OrbitPrismDataset(processed_dir=tmp_dir, split="test", modality="radar")
-        assert len(ds_test) == 4
+        assert len(ds_test) == 0
 
 
-def test_optical_metadata_schema():
-    """Test data/optical_tiles.csv schema and column names."""
-    csv_path = Path("data/optical_tiles.csv")
-    if not csv_path.exists():
-        from src.data.generate_optical_metadata import generate_optical_dataset_metadata
-        df = generate_optical_dataset_metadata(out_csv=csv_path)
-    else:
-        df = pd.read_csv(csv_path)
+def test_optical_metadata_schema(tmp_path):
+    """Test optical_tiles.csv schema and column names (generated into a temp folder)."""
+    from src.data.generate_optical_metadata import generate_optical_dataset_metadata
+    df = generate_optical_dataset_metadata(out_csv=tmp_path / "optical_tiles.csv")
 
     expected_cols = [
         "image_id", "image_path", "disaster_type", "latitude", "longitude",
@@ -289,17 +289,17 @@ def test_optical_metadata_schema():
     ]
     assert list(df.columns) == expected_cols
     assert len(df) == 6825
-    assert set(df["split"].unique()) == {"Train", "Validation", "Test"}
+    assert set(df["split"].unique()) == {"train", "valid", "test", "holdout"}
+    # The held-out event stays separate and cloud_fraction is the tiles_base value.
+    assert set(df.loc[df["split"] == "holdout", "event_id"]) == {"Bolivia"}
+    base = pd.read_csv(Path(__file__).resolve().parents[2] / "data" / "tiles_base.csv")
+    assert (df["cloud_fraction"].values == base["cloud_frac"].values).all()
 
 
-def test_radar_metadata_schema():
-    """Test data/radar_tiles.csv schema and column names."""
-    csv_path = Path("data/radar_tiles.csv")
-    if not csv_path.exists():
-        from src.data.generate_radar_metadata import generate_radar_dataset_metadata
-        df = generate_radar_dataset_metadata(out_csv=csv_path)
-    else:
-        df = pd.read_csv(csv_path)
+def test_radar_metadata_schema(tmp_path):
+    """Test radar_tiles.csv schema and column names (generated into a temp folder)."""
+    from src.data.generate_radar_metadata import generate_radar_dataset_metadata
+    df = generate_radar_dataset_metadata(out_csv=tmp_path / "radar_tiles.csv")
 
     expected_cols = [
         "image_id", "image_path", "disaster_type", "latitude", "longitude",
@@ -309,4 +309,20 @@ def test_radar_metadata_schema():
     ]
     assert list(df.columns) == expected_cols
     assert len(df) == 6825
-    assert set(df["split"].unique()) == {"Train", "Validation", "Test"}
+    assert set(df["split"].unique()) == {"train", "valid", "test", "holdout"}
+    assert set(df.loc[df["split"] == "holdout", "event_id"]) == {"Bolivia"}
+
+
+def test_tiles_base_clouds_match_the_pixel_pipeline():
+    """tiles_base.csv cloud_frac must equal what src.data.cloud_simulation gives the pixels."""
+    import numpy as np
+    from src.data.cloud_simulation import compute_tile_cloud_metrics, simulate_chip_cloud_mask
+
+    base = pd.read_csv(Path(__file__).resolve().parents[2] / "data" / "tiles_base.csv")
+    rng = np.random.default_rng(0)
+    for i in rng.choice(len(base), 25, replace=False):
+        r = base.iloc[i]
+        alpha = simulate_chip_cloud_mask(r["chip"])
+        tile = alpha[r["row"] * 128:(r["row"] + 1) * 128, r["col"] * 128:(r["col"] + 1) * 128]
+        cf, sensor = compute_tile_cloud_metrics(tile)
+        assert abs(cf - r["cloud_frac"]) < 1e-4 and sensor == r["sensor_used"]

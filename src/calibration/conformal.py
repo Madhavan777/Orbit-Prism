@@ -12,8 +12,13 @@ Threshold Formula:
 
 Edge Cases & Fallbacks:
     - If k == 0 (occurs when (n + 1) * alpha < 1, e.g. n < ceil(1/alpha) - 1):
-      Cannot pick a valid 1-based index k. Uses documented conservative fallback:
-      threshold = minimum critical calibration score (0-th index).
+      Cannot pick a valid 1-based index k. Fallback: threshold = 0.0, i.e. keep every tile
+      (miss rate 0, no bandwidth saving). The minimum critical score is NOT safe here: its
+      expected miss rate is up to 1/(n+1), which exceeds alpha when n + 1 < 1/alpha.
+
+Scores: thresholds are in the units of the scores passed in. The pipeline passes RAW p_flood,
+so the rule is "keep a tile if p_flood >= threshold". The bound holds only if the test
+data is exchangeable with the calibration data (a held-out event may not be).
     - If n == 0: Reports unavailable with fallback threshold.
 """
 
@@ -71,23 +76,25 @@ def compute_conformal_threshold(
         # Sample size is insufficient for the exact finite-sample quantile at this alpha
         # Example: for alpha=0.01, requires (n + 1) * 0.01 >= 1 => n >= 99
         min_required_n = math.ceil(1.0 / alpha) - 1
-        threshold = float(clean_scores[0])  # Conservative fallback: 1st smallest score
+        # Keep every tile (threshold 0): the only choice that cannot exceed alpha. Using the
+        # minimum critical score instead would give an expected miss rate up to 1/(n+1),
+        # which is above alpha whenever n + 1 < 1/alpha.
+        threshold = 0.0
         logger.warning(
             "Finite-sample correction k = floor((%d + 1) * %.2f) = 0. "
-            "Requires n >= %d for exact quantile. Using conservative fallback threshold=%.4f (min score).",
+            "Requires n >= %d for an exact quantile. Falling back to threshold=0.0 (keep every tile).",
             n,
             alpha,
             min_required_n,
-            threshold,
         )
         return {
-            "threshold": round(threshold, 6),
+            "threshold": threshold,
             "k": 0,
             "n": n,
             "status": "conservative_fallback",
             "alpha": alpha,
             "min_required_n": min_required_n,
-            "note": f"Sample size n={n} < {min_required_n}; using minimum critical score as conservative fallback.",
+            "note": f"Sample size n={n} < {min_required_n}; no exact quantile exists, so every tile is kept (threshold 0.0).",
         }
 
     # k >= 1: 1-based index k corresponds to 0-based index k - 1 in sorted array

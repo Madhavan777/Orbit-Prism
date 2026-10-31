@@ -13,7 +13,7 @@ The data pipeline provides the foundation for the ORBIT-PRISM visual triage syst
 - Partitions 512×512 chips into 4×4 grids of sixteen 128×128 tiles.
 - Simulates realistic cloud occlusion reproducibly on optical data without touching radar data.
 - Enforces strict event-based dataset splitting (Bolivia held-out test event, calibration events, training events).
-- Exports per-event compressed NPZ containers and validated tile metadata (`data/tiles_base.csv`).
+- Exports per-event compressed NPZ containers; the validated tile metadata (`data/tiles_base.csv`) is made by `scripts/build_tiles_base.py`.
 
 ```
 Raw GeoTIFF Chips (512x512)
@@ -127,12 +127,13 @@ python -m src.data.download
 
 ## 7. Event-Based Splitting
 
-- **Strict Isolation:** Individual chips/tiles are never split randomly.
-- **Splits:**
-  - **TEST (`holdout`):** `Bolivia` (15 chips, 231 tiles, 42 critical). Held out strictly for final test evaluation; never used in training or calibration.
-  - **CALIBRATION (`calibration` or `valid`):** `Nigeria` (18 chips, 282 tiles, 71 critical) and `Spain` (30 chips, 478 tiles, 46 critical) for event-based mode; or official validation chips across events for official mode.
-  - **TRAIN (`train`):** Remaining eligible events.
-- **Validation:** Automated test verifies zero event overlap between train, calibration, and test sets.
+- **Default (official) mode, the one the team uses:** the split names are exactly `train`, `valid`, `test`, `holdout` (CONTEXT.md). The official train/valid/test sets are chip-level splits that mix events; only Bolivia is held out as a whole event.
+  - **`holdout`:** `Bolivia` (15 chips, 231 tiles, 42 critical). The headline test set. Never used in training or calibration. It is never merged into `test`; request it as `holdout`.
+  - **`valid`:** the calibration set (1,354 tiles across events). Calibration and the miss-rate dial fit here only.
+  - **`test`:** a secondary in-distribution report (1,378 tiles), never used for tuning.
+  - **`train`:** the rest.
+- **Optional event-based mode** (`calibration` instead of `valid`, using Nigeria and Spain as calibration events) exists in `src/data/split_events.py` for experiments. It is not the default, and its split name `calibration` is accepted by the calibration code and the trainer.
+- **Validation:** an automated test checks there is no event overlap between the holdout and the other splits.
 
 ---
 
@@ -144,9 +145,12 @@ python -m src.data.download
   - `radar`: (N, 128, 128, 2) uint8
   - `water_frac`: (N,) float32
   - `cloud_frac`: (N,) float32
-- **Metadata CSV:** `data/tiles_base.csv`
-  - Columns: `event, chip, row, col, split, water_frac, critical, cloud_frac, sensor_used, p_flood, extent`
-  - Packets: `bytes_l0 = 32`, `bytes_l1 = 2048`, `bytes_l2 = 65536` (optical) or `32768` (radar).
+  - `split`: (N,) string, one of `train`, `valid`, `test`, `holdout`
+  - `critical`: (N,) int32
+- **Metadata CSV:** `data/tiles_base.csv`, made by `python scripts/build_tiles_base.py` from the real labels and the simulated clouds. It needs no imagery, because the cloud mask depends only on the chip id.
+  - Columns (9): `event, chip, row, col, split, water_frac, critical, cloud_frac, sensor_used`. The model scores `p_flood` and `extent` are added later by `scripts/merge_scores.py`, from real model outputs only.
+  - Packets: `bytes_l0 = 32`, `bytes_l1 = 2048` (provisional until the scheduler owner confirms it in `src/constants.py`), `bytes_l2 = 65536` (optical) or `32768` (radar).
+- **Cloud contract:** `cloud_frac` in `tiles_base.csv` is the measured fraction of the simulated cloud mask that the pixels get (alpha >= 0.5). A test checks that it matches `src/data/cloud_simulation.py`.
 
 ---
 

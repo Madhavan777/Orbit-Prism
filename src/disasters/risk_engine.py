@@ -1,12 +1,13 @@
-"""Confidence-Aware Risk and Prioritisation Engine for ORBIT-PRISM.
+"""EXPERIMENTAL confidence-aware priority scoring for ORBIT-PRISM (floods and fires only).
 
-Calculates multi-disaster priority scores based on:
-  - Event probability and physical severity
-  - Spatial extent and geographic exposure (population/infrastructure)
+Calculates a priority score (not a danger or risk measure) from:
+  - Event probability and severity
+  - Spatial extent and exposure (population/infrastructure), when known
   - Sensor confidence and cloud obscuration
-  - Multi-disaster urgency dynamics
+  - A per-hazard urgency multiplier
 
-Explicitly represents missing exposure information as UNKNOWN rather than zero risk.
+All weights and multipliers are unvalidated assumptions. No exposure data is loaded, so
+exposure is normally UNKNOWN and is represented as such rather than as zero.
 """
 
 from dataclasses import dataclass

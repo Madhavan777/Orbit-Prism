@@ -17,7 +17,9 @@ Generates data/optical_tiles.csv with the exact schema requested by the optical 
 - water_fraction: Fraction of water-covered valid pixels [0, 1]
 - burn_fraction: Fraction of burned area (0.0)
 - cloud_fraction: Fraction of cloud-covered area [0, 1]
-- split: Train / Validation / Test
+- split: train / valid / test / holdout (CONTEXT.md values; holdout = Bolivia, kept separate)
+
+cloud_fraction is the SIMULATED cloud cover from data/tiles_base.csv (src/data/cloud_simulation.py).
 """
 
 import json
@@ -149,13 +151,9 @@ def generate_optical_dataset_metadata(
         origin_lon, origin_lat, scale_x, scale_y = chip_geo_cache[chip]
         tile_lat, tile_lon = compute_tile_lat_lon(origin_lon, origin_lat, scale_x, scale_y, r, c)
 
-        # Standard split mapping: Train / Validation / Test
-        if split_raw == "train":
-            split_std = "Train"
-        elif split_raw in ["valid", "calibration"]:
-            split_std = "Validation"
-        else:
-            split_std = "Test"
+        # Split values follow CONTEXT.md exactly (train / valid / test / holdout). The held-out
+        # event (Bolivia, "holdout") is never merged into "test".
+        split_std = split_raw
 
         # Disaster classification
         disaster_type = "Flood" if wf >= 0.05 else "Normal"
@@ -192,7 +190,7 @@ def generate_optical_dataset_metadata(
 
     out_df = pd.DataFrame(records)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(out_csv, index=False)
+    out_df.to_csv(out_csv, index=False, lineterminator="\n")
     logger.info("Generated %s with %d rows and %d columns", out_csv, len(out_df), len(out_df.columns))
     return out_df
 

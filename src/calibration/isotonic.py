@@ -114,6 +114,20 @@ class PathIsotonicCalibrator:
         self.is_fitted = True
         return self
 
+    def export_knots(self) -> Dict[str, Optional[Dict[str, List[float]]]]:
+        """Piecewise-linear knots of each fitted path, so a calibrated probability can be
+        recomputed without refitting: p = np.interp(score, x, y) (clipped at the ends)."""
+        out: Dict[str, Optional[Dict[str, List[float]]]] = {}
+        for path, ir in self.calibrators.items():
+            if ir is None:
+                out[path] = None
+            else:
+                out[path] = {
+                    "x": [round(float(v), 6) for v in ir.X_thresholds_],
+                    "y": [round(float(v), 6) for v in ir.y_thresholds_],
+                }
+        return out
+
     def predict_proba(
         self,
         scores: np.ndarray,

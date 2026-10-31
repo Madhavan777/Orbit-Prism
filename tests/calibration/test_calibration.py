@@ -95,8 +95,9 @@ def test_conformal_edge_case_k_zero():
 
     assert res["k"] == 0
     assert res["status"] == "conservative_fallback"
-    # Fallback uses min score (0-th element)
-    assert res["threshold"] == pytest.approx(scores[0], 0.001)
+    # Fallback keeps every tile (threshold 0). The minimum critical score would NOT be safe:
+    # its expected miss rate is up to 1/(n+1), above alpha when n + 1 < 1/alpha.
+    assert res["threshold"] == 0.0
 
 
 def test_conformal_empty_scores():
@@ -108,16 +109,8 @@ def test_conformal_empty_scores():
 
 def test_optical_radar_path_separation():
     """Test that optical and radar paths calibrate separate distributions."""
-    df = pd.DataFrame([
-        # Optical calibration tiles (moderate scores)
-        {"split": "valid", "sensor_used": "optical", "p_flood": 0.40, "critical": 1, "event": "E1", "chip": "C1", "row": 0, "col": 0},
-        {"split": "valid", "sensor_used": "optical", "p_flood": 0.60, "critical": 1, "event": "E1", "chip": "C1", "row": 0, "col": 1},
-        {"split": "valid", "sensor_used": "optical", "p_flood": 0.20, "critical": 0, "event": "E1", "chip": "C1", "row": 0, "col": 2},
-        # Radar calibration tiles (higher scores)
-        {"split": "valid", "sensor_used": "radar", "p_flood": 0.80, "critical": 1, "event": "E1", "chip": "C1", "row": 1, "col": 0},
-        {"split": "valid", "sensor_used": "radar", "p_flood": 0.90, "critical": 1, "event": "E1", "chip": "C1", "row": 1, "col": 1},
-        {"split": "valid", "sensor_used": "radar", "p_flood": 0.30, "critical": 0, "event": "E1", "chip": "C1", "row": 1, "col": 2},
-    ])
+    # 30 critical tiles per path (enough for an exact 10% quantile); radar scores sit higher.
+    df = _score_df()
 
     dial = SplitConformalDial(target_alphas=[0.10])
     dial.calibrate(df, score_col="p_flood", calib_splits=["valid"])
@@ -148,6 +141,57 @@ def test_pipeline_apply_preserves_structure():
     assert "p_calibrated" in res_df.columns
     assert (res_df["p_calibrated"] >= 0.0).all()
     assert (res_df["p_calibrated"] <= 1.0).all()
+
+
+def _score_df():
+    rows = []
+    for i in range(30):  # 30 critical optical tiles with distinct raw scores 0.31 ... 0.60
+        rows.append({"event": "Ghana", "chip": f"G{i}", "row": 0, "col": 0, "split": "valid",
+                     "sensor_used": "optical", "p_flood": 0.30 + 0.01 * (i + 1), "critical": 1})
+        rows.append({"event": "Ghana", "chip": f"N{i}", "row": 0, "col": 1, "split": "valid",
+                     "sensor_used": "optical", "p_flood": 0.05 + 0.005 * i, "critical": 0})
+    for i in range(30):
+        rows.append({"event": "Ghana", "chip": f"R{i}", "row": 1, "col": 0, "split": "valid",
+                     "sensor_used": "radar", "p_flood": 0.40 + 0.01 * i, "critical": 1})
+    return pd.DataFrame(rows)
+
+
+def test_thresholds_are_in_raw_score_units_and_json_records_provenance():
+    """calibration.json says 'keep_tile if p_flood >= threshold', so thresholds must be raw scores."""
+    df = _score_df()
+    pipeline = CalibrationPipeline(target_alphas=[0.10])
+    pipeline.score_source = "synthetic_placeholder (test)"
+    pipeline.fit_and_calibrate(df, calib_splits=["valid"])
+    out = pipeline.to_dict()
+
+    # k = floor(31 * 0.10) = 3 -> third smallest raw critical optical score = 0.33
+    assert out["optical"]["0.1"] == pytest.approx(0.33, abs=1e-6)
+    assert out["threshold_score_space"] == "raw_p_flood"
+    assert out["score_source"] == "synthetic_placeholder (test)"
+    assert "probability_calibration_metrics_in_sample" in out
+    assert "probability_calibration_metrics" not in out
+    knots = out["isotonic_knots"]["optical"]
+    assert len(knots["x"]) == len(knots["y"]) >= 2
+    assert all(b >= a for a, b in zip(knots["y"], knots["y"][1:]))  # monotone
+
+
+def test_cli_refuses_placeholder_scores_without_flag(monkeypatch, tmp_path):
+    """Calibrating on synthetic placeholders must be an explicit choice."""
+    import sys
+    from src.calibration import calibrate as cal
+
+    monkeypatch.setattr(cal, "load_dataset_for_calibration",
+                        lambda: (_score_df(), "synthetic_placeholder (data/fake_tiles.csv)"))
+    out = tmp_path / "calibration.json"
+    monkeypatch.setattr(sys, "argv", ["calibrate", "--output", str(out)])
+    with pytest.raises(SystemExit):
+        cal.main()
+    assert not out.exists()
+
+    monkeypatch.setattr(sys, "argv", ["calibrate", "--output", str(out), "--allow-placeholder"])
+    cal.main()
+    import json
+    assert json.loads(out.read_text())["score_source"].startswith("synthetic_placeholder")
 
 
 def test_heldout_isolation_and_evaluation():

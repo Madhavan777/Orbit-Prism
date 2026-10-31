@@ -227,20 +227,14 @@ def check_esa_snap_installed() -> Dict[str, any]:
 
 
 def discover_agnel_radar_dataset() -> Optional[Path]:
-    """Discover real processed Sentinel-1 SAR radar dataset provided by Agnel in data/."""
-    candidates = [
-        DATA_DIR / "processed" / "flood" / "s1_radar_tiles.npz",
-        DATA_DIR / "processed" / "flood" / "radar_tiles.npz",
-        DATA_DIR / "radar_tiles.npz",
-        DATA_DIR / "processed" / "radar_tiles.npz",
-        DATA_DIR / "agnel_radar.npz",
-        DATA_DIR / "radar_processed.npz",
-    ]
-    for c in candidates:
-        if c.exists():
-            return c
-    found = list(DATA_DIR.glob("**/*.npz"))
-    return found[0] if found else None
+    """Folder with the processed per-event NPZ files (data/processed), or None if there are none.
+
+    The pipeline writes one NPZ per event (src/data/dataset.py). All of them are needed:
+    reading just one file would train on a single event (the first alphabetically is Bolivia,
+    the held-out test event).
+    """
+    processed = DATA_DIR / "processed"
+    return processed if processed.is_dir() and any(processed.glob("*.npz")) else None
 
 
 def load_radar_data_for_training(
@@ -268,9 +262,12 @@ def load_radar_data_for_training(
     tiles_df = pd.read_csv(TILES_BASE_CSV)
     tiles_df["tile_id"] = [f"{r.chip}_{r.row}_{r.col}" for _, r in tiles_df.iterrows()]
 
-    npz = np.load(dataset_path, allow_pickle=True)
-    images = npz["images"] if "images" in npz else npz["X"]
-    tile_ids = [str(k) for k in (npz["tile_ids"] if "tile_ids" in npz else npz["keys"])]
+    from src.data.dataset import OrbitPrismDataset
+
+    # All events at once; tile_id is <chip>_<row>_<col>, the key used in tiles_base.csv.
+    ds = OrbitPrismDataset(processed_dir=dataset_path, split="all", modality="radar")
+    images = ds.radar
+    tile_ids = [str(k) for k in ds.tile_id]
 
     # Normalize uint8 to float32 [0, 1]
     if images.dtype == np.uint8:

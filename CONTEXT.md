@@ -83,20 +83,31 @@ Design notes:
 
 ## File contracts (change only with team agreement)
 
-Keys for every per-tile file: `chip, row, col` (`tile_id` = `chip_row_col`). All files are CSV with a header unless noted.
+A tile is identified by `tile_id = <chip>_<row>_<col>`, equal to `chip, row, col` joined by underscores. Score files may use either `tile_id` or `chip, row, col`. All files are CSV with a header unless noted. Split values everywhere are exactly `train`, `valid`, `test`, `holdout`.
 
-| file | owner | columns |
+| file | owner | content |
 |---|---|---|
-| `data/tiles_base.csv` | Madhavan | `event, chip, row, col, split, water_frac, critical, cloud_frac, sensor_used` (the schema above without `p_flood`, `extent`) |
-| `results/scores_optical_int8.csv` | Agnel | `chip, row, col, p_flood, extent`: raw (uncalibrated) INT8 optical-model score, for every tile in every split |
-| `results/scores_radar_int8.csv` | Agnel | same columns, radar model |
+| `data/tiles_base.csv` | Madhavan | `event, chip, row, col, split, water_frac, critical, cloud_frac, sensor_used`. Made by `scripts/build_tiles_base.py` from the real labels and the simulated clouds; `cloud_frac` equals what the pixel pipeline gives the tiles (tested) |
+| `data/optical_tiles.csv`, `data/radar_tiles.csv` | Agnel | per-tile index files in the optical and radar developers' format (`image_id, image_path, disaster_type, ..., cloud_fraction, split`); split values as above; made by `python -m src.data.generate_optical_metadata` / `generate_radar_metadata` |
+| `data/processed/<event>.npz` | Agnel | git-ignored tile arrays: `tile_id, optical, radar, water_frac, cloud_frac, split, critical`. Always load them all with `src.data.dataset.OrbitPrismDataset`; never read a single file (the first alphabetically is Bolivia) |
+| `results/scores_optical_float.csv`, `results/scores_radar_float.csv` | Shenbaga, Harish | `tile_id, p_flood, extent` from the FLOAT models, for every tile in every split |
+| `results/scores_optical_int8.csv`, `results/scores_radar_int8.csv` | Harish | same columns from the INT8 models (`src/compress/predict_int8.py`). These two are what `scripts/merge_scores.py` reads |
 | `results/scores_ndwi.csv` | Madhavan | same columns, NDWI baseline |
-| `results/calibration.json` | Shenbaga | `{"version": 1, "calibration_split": "valid", "method": "split_conformal", "optical": {"0.05": t, ...}, "radar": {"0.05": t, ...}}`. Keys are target miss rates as strings; `t` is the `p_flood` threshold: keep a tile when `p_flood >= t` |
-| `results/memory_table.csv` | Harish | `model, dtype, weights_bytes, peak_activation_bytes, tile_buffer_bytes, total_bytes, macs, recall, ece` (float vs INT8 rows; `total_bytes` must be <= 4,200,000) |
-| `data/tiles.csv` | Madhavan | the 11-column schema, built by `scripts/merge_scores.py` |
+| `results/calibration.json` | Agnel | made by `python -m src.calibration.calibrate` from REAL scores only. `{"version": 1, "calibration_split": "valid", "method": "split_conformal", "optical": {"0.05": t, ...}, "radar": {...}, "threshold_score_space": "raw_p_flood", "score_source": "...", "isotonic_knots": {...}}`. Keep a tile when raw `p_flood >= t`. A threshold of 0.0 means "send everything" (too few calibration tiles for that miss rate). Not committed until it is made from real scores |
+| `results/memory_table.csv` | Harish | `model, dtype, weights_bytes, peak_activation_bytes, tile_buffer_bytes, total_bytes, macs, recall, ece, basis`. `total_bytes = weights + peak activation + staged tile buffer` (conservative) and must be <= 4,200,000. `recall` and `ece` are `NOT_MEASURED` until a trained model is evaluated; `basis` is `untrained_architecture` or `trained_model_file` |
+| `data/tiles.csv` | Madhavan | the 11-column schema, built by `scripts/merge_scores.py` from the INT8 score files only. The script refuses to run on synthetic scores (`--allow-placeholder` writes the git-ignored `data/tiles_placeholder.csv` for plumbing tests) |
 | send log from `src.scheduler.sim.run` | Akhilesh | `order, chip, row, col, layer, bytes, cum_bytes, pass_index`, where `layer` is `L0`, `L1` or `L2` |
 
-`src.scheduler.sim.run(tiles, policy, budget_bytes)` takes a DataFrame in the 11-column schema, a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism`, and a per-pass byte budget, and returns the send log. Shared constants live in `src/constants.py`. The L1 preview size is not decided yet: Akhilesh sets `L1_BYTES` there and tells the group.
+`src.scheduler.sim.run(tiles, policy, budget_bytes)` takes a DataFrame in the 11-column schema, a policy in `capture_order | discard_cloudy | optical_only | colour_index | orbit_prism`, and a per-pass byte budget, and returns the send log. Shared constants live in `src/constants.py`. The L1 preview size is provisional at 2,048 B (in `src/data/generate_metadata.py`); Akhilesh confirms it in `src/constants.py`.
+
+## Known limitations (stated, not hidden)
+
+- **Synthetic scores everywhere until models are trained.** `data/fake_tiles.csv` has made-up `p_flood` and `extent`; its numbers are never shown. Real results need the trained INT8 score files.
+- **The INT8 optical model keeps a float32 copy of the input tile** (its Rescaling layer runs in float), so its estimated peak activation is 327,680 B against 65,536 B for radar. Still about 8% of the budget; folding the scale into the first convolution would remove it.
+- **Early stopping uses the `valid` split, which is also the calibration split.** This is a small optimistic bias for the miss-rate dial; a separate slice of `train` for early stopping removes it.
+- **Isotonic ECE and Brier values are in-sample** (saved as `probability_calibration_metrics_in_sample`). Report held-out values separately.
+- **The miss-rate promise holds only if the test data resembles the calibration data.** Bolivia is a different event, so the achieved miss rate there is measured and reported, whatever it is.
+- **Fire is not loaded.** See Hazards.
 
 ## Repo rules
 

@@ -30,19 +30,24 @@ def build_representative_dataset_generator(
     samples: np.ndarray,
     batch_size: int = 1,
     num_calibration_steps: int = 100,
+    dtype=np.float32,
 ) -> Callable[[], Generator[List[np.ndarray], None, None]]:
-    """Create a representative dataset generator yielding float32 calibration tensors.
+    """Create a representative dataset generator yielding calibration tensors.
 
     Parameters
     ----------
     samples : np.ndarray
-        Calibration images in [0, 1] float32, shape (N, H, W, C).
+        Calibration images, shape (N, H, W, C). They must be in the units the model's Input
+        layer expects: radar takes float32 in [0, 1]; the optical model takes raw uint8 tiles
+        in [0, 255] and rescales internally, so pass dtype=np.uint8 for it.
+    dtype :
+        dtype of the yielded batches; must equal the model's input dtype.
     """
     total_samples = len(samples)
 
     def representative_dataset_gen() -> Generator[List[np.ndarray], None, None]:
         for i in range(min(num_calibration_steps, total_samples // batch_size)):
-            batch = samples[i * batch_size : (i + 1) * batch_size].astype(np.float32)
+            batch = samples[i * batch_size : (i + 1) * batch_size].astype(dtype)
             yield [batch]
 
     return representative_dataset_gen
@@ -97,7 +102,9 @@ def convert_model_to_full_int8(
                 "zero_point": int(inp["quantization_parameters"]["zero_points"][0]) if len(inp["quantization_parameters"]["zero_points"]) > 0 else 0,
             }
         )
-        assert inp["dtype"] == np.int8, f"Input tensor {inp['name']} is not int8: {inp['dtype']}"
+        # int8 for the radar model (float input, quantised); uint8 for the optical model, whose
+        # Input layer already takes raw uint8 tiles and rescales internally.
+        assert inp["dtype"] in (np.int8, np.uint8), f"Input tensor {inp['name']} is not int8/uint8: {inp['dtype']}"
 
     output_specs = []
     for out in output_details:
@@ -177,7 +184,9 @@ def quantize_optical_model(
             "message": "TRAIN optical images required for representative calibration dataset.",
         }
 
-    rep_gen = build_representative_dataset_generator(train_optical_images, batch_size=1, num_calibration_steps=100)
+    # The optical model's Input layer is uint8 (it rescales internally), so calibrate on raw uint8 tiles.
+    rep_gen = build_representative_dataset_generator(
+        train_optical_images, batch_size=1, num_calibration_steps=100, dtype=np.uint8)
     out_path = MODELS_DIR / "optical_int8.tflite"
 
     _, info = convert_model_to_full_int8(optical_float_path, rep_gen, output_tflite_path=out_path)

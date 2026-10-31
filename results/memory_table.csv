@@ -1,5 +1,5 @@
-model,precision,weights_KB,peak_activation_KB,auroc_cal,recall_at_fixed_threshold,fits_4.2MB
-Optical,FLOAT32,PENDING,PENDING,PENDING,PENDING,PENDING
-Optical,INT8,PENDING,PENDING,PENDING,PENDING,PENDING
-Radar,FLOAT32,PENDING,PENDING,PENDING,PENDING,PENDING
-Radar,INT8,PENDING,PENDING,PENDING,PENDING,PENDING
+model,dtype,weights_bytes,peak_activation_bytes,tile_buffer_bytes,total_bytes,macs,recall,ece,basis
+Optical,FLOAT32,61544,393216,65536,520296,4128832,NOT_MEASURED,NOT_MEASURED,untrained_architecture
+Optical,INT8,15688,327680,65536,408904,4128832,NOT_MEASURED,NOT_MEASURED,untrained_architecture
+Radar,FLOAT32,60968,262144,32768,355880,5308480,NOT_MEASURED,NOT_MEASURED,untrained_architecture
+Radar,INT8,15544,65536,32768,113848,5308480,NOT_MEASURED,NOT_MEASURED,untrained_architecture

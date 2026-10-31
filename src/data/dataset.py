@@ -227,7 +227,10 @@ class EventDataset:
         self.path = Path(npz_path)
         if not self.path.exists():
             raise FileNotFoundError(f"Processed NPZ file not found: {self.path}")
-        self._data = np.load(self.path)
+        # Read everything and close the file: an open NPZ handle blocks deleting or replacing
+        # the file on Windows.
+        with np.load(self.path) as z:
+            self._data = {k: z[k] for k in z.files}
 
     @property
     def tile_id(self) -> np.ndarray:
@@ -289,6 +292,8 @@ class OrbitPrismDataset:
     - .radar: (N, 128, 128, 2) uint8 [VV, VH]
     - .optical: (N, 128, 128, 4) uint8 [B2, B3, B4, B8]
     - .water_frac: (N,) float32 continuous flood label
+    - .cloud_frac: (N,) float32 simulated cloud fraction of each tile
+    - .event, .split, .tile_id: (N,) strings; split is one of train / valid / test / holdout
     - .critical: (N,) int32 binary label (water_frac >= 0.30)
     """
 
@@ -306,6 +311,7 @@ class OrbitPrismDataset:
         radar_list = []
         optical_list = []
         water_fracs = []
+        cloud_fracs = []
         critical_list = []
         event_list = []
         split_list = []
@@ -316,14 +322,15 @@ class OrbitPrismDataset:
 
         for npz_path in npz_files:
             ev_name = npz_path.stem
-            ev_data = np.load(npz_path)
+            with np.load(npz_path) as z:
+                ev_data = {k: z[k] for k in z.files}
 
             ev_splits = ev_data["split"] if "split" in ev_data else np.array(["holdout" if ev_name == "Bolivia" else "train"] * len(ev_data["tile_id"]))
 
             if self.split_filter is not None and self.split_filter != "all":
-                if self.split_filter == "test":
-                    mask = np.isin(ev_splits, ["test", "holdout"])
-                elif self.split_filter == "calibration":
+                # "test" is the chip-level test split only. The held-out event (Bolivia) is
+                # its own split, "holdout", and must be requested explicitly.
+                if self.split_filter == "calibration":
                     mask = np.isin(ev_splits, ["valid", "calibration"])
                 else:
                     mask = (ev_splits == self.split_filter)
@@ -335,6 +342,7 @@ class OrbitPrismDataset:
 
             tile_ids.extend(ev_data["tile_id"][mask].tolist())
             water_fracs.extend(ev_data["water_frac"][mask].tolist())
+            cloud_fracs.extend(ev_data["cloud_frac"][mask].tolist())
             if "critical" in ev_data:
                 critical_list.extend(ev_data["critical"][mask].tolist())
             else:
@@ -349,6 +357,7 @@ class OrbitPrismDataset:
 
         self.tile_id = np.array(tile_ids, dtype=str)
         self.water_frac = np.array(water_fracs, dtype=np.float32)
+        self.cloud_frac = np.array(cloud_fracs, dtype=np.float32)  # simulated clouds
         self.critical = np.array(critical_list, dtype=np.int32)
         self.event = np.array(event_list, dtype=str)
         self.split = np.array(split_list, dtype=str)

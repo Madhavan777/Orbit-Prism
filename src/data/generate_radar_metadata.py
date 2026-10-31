@@ -15,7 +15,7 @@ Generates data/radar_tiles.csv specifically structured for the Radar CNN develop
 - water_fraction: Continuous flood water fraction [0, 1]
 - burn_fraction: Burned area fraction (0.0 for flood benchmark)
 - cloud_fraction: Simulated cloud fraction (radar is cloud-invariant)
-- split: Train / Validation / Test
+- split: train / valid / test / holdout (CONTEXT.md values; holdout = Bolivia, kept separate)
 - source_dataset: Sen1Floods11 S1Hand (v1.1)
 """
 
@@ -137,12 +137,9 @@ def generate_radar_dataset_metadata(
         origin_lon, origin_lat, scale_x, scale_y = chip_geo_cache[chip]
         tile_lat, tile_lon = compute_tile_lat_lon(origin_lon, origin_lat, scale_x, scale_y, r, c)
 
-        if split_raw == "train":
-            split_std = "Train"
-        elif split_raw in ["valid", "calibration"]:
-            split_std = "Validation"
-        else:
-            split_std = "Test"
+        # Split values follow CONTEXT.md exactly (train / valid / test / holdout); the
+        # held-out event (Bolivia) is never merged into "test".
+        split_std = split_raw
 
         disaster_type = "Flood" if wf >= 0.05 else "Normal"
         img_path = f"data/processed/{event}.npz"
@@ -172,7 +169,7 @@ def generate_radar_dataset_metadata(
 
     out_df = pd.DataFrame(records)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(out_csv, index=False)
+    out_df.to_csv(out_csv, index=False, lineterminator="\n")
     logger.info("Generated %s with %d rows and %d columns", out_csv, len(out_df), len(out_df.columns))
     return out_df
 

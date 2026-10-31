@@ -1,10 +1,10 @@
-"""Comprehensive Unit Tests for ORBIT-PRISM Multi-Disaster Engine.
+"""Unit tests for the experimental hazard registry, priority scoring and scheduler sketch.
 
-Validates:
-  1. DisasterRegistry metadata & 6 categories.
+Scope is floods and forest fires only. Validates:
+  1. DisasterRegistry: exactly the two in-scope hazards, with honest statuses.
   2. RiskEngine confidence math & explicit UNKNOWN exposure handling.
   3. PriorityScheduler bandwidth simulation, carryover, de-duplication, & CSV contracts.
-  4. Wildfire & Cyclone TinyML model architectures, budgets, and random forward passes.
+  4. The wildfire architecture's budget and a random forward pass.
 """
 
 import sys
@@ -19,27 +19,26 @@ from src.disasters.registry import DisasterRegistry, DisasterCategory, Implement
 from src.disasters.risk_engine import RiskEngine, DisasterEvent, RiskAssessment
 from src.disasters.scheduler_interface import PriorityScheduler, PacketTier, TransmissionStatus
 from src.disasters.wildfire import build_wildfire_model, compute_nbr_index
-from src.disasters.cyclone import build_cyclone_model
 from src.models.optical import calculate_model_memory
 
 
 def test_registry_profiles():
-    """Verify all 6 disaster categories have complete metadata and valid licenses."""
+    """Only the two in-scope hazards exist, and statuses describe what is really in the repo."""
     categories = DisasterRegistry.list_categories()
-    assert len(categories) == 6
-    assert set(categories) == {
-        DisasterCategory.FLOOD,
-        DisasterCategory.WILDFIRE,
-        DisasterCategory.CYCLONE,
-        DisasterCategory.LANDSLIDE,
-        DisasterCategory.EARTHQUAKE,
-        DisasterCategory.VOLCANO
-    }
+    assert set(categories) == {DisasterCategory.FLOOD, DisasterCategory.WILDFIRE}
 
     flood_prof = DisasterRegistry.get_profile(DisasterCategory.FLOOD)
-    assert flood_prof.status == ImplementationStatus.IMPLEMENTED
+    # Nothing is trained on real data and evaluated on the held-out event yet.
+    assert flood_prof.status == ImplementationStatus.SIMULATED
     assert "Sen1Floods11" in flood_prof.dataset.name
-    assert flood_prof.dataset.license == "CC BY-4.0"
+    assert "unconfirmed" in flood_prof.dataset.license.lower()
+
+    fire_prof = DisasterRegistry.get_profile(DisasterCategory.WILDFIRE)
+    # No fire data has been loaded, so fire cannot be anything above PLANNED.
+    assert fire_prof.status == ImplementationStatus.PLANNED
+    assert "NOT LOADED" in fire_prof.dataset.samples_approx
+
+    assert all(p.status != ImplementationStatus.IMPLEMENTED for p in DisasterRegistry.all_profiles().values())
 
 
 def test_risk_engine_unknown_exposure_handling():
@@ -108,8 +107,8 @@ def test_risk_engine_cloud_confidence_degradation():
     assert a_clear.priority_score > a_cloudy.priority_score
 
 
-def test_priority_ranking_multi_disaster():
-    """Verify ranking orders by priority, not blindly by disaster category."""
+def test_priority_ranking_across_hazards():
+    """Verify ranking orders by priority, not blindly by hazard type."""
     engine = RiskEngine()
 
     # Wildfire near dense population
@@ -122,17 +121,17 @@ def test_priority_ranking_multi_disaster():
         exposure_score=0.95
     )
 
-    # Distant volcanic plume with zero nearby population
-    remote_volcano = DisasterEvent(
-        tile_id="remote_volcano",
-        category=DisasterCategory.VOLCANO,
+    # Flood over an unpopulated area
+    remote_flood = DisasterEvent(
+        tile_id="remote_flood",
+        category=DisasterCategory.FLOOD,
         p_event=0.95,
         severity=0.80,
         extent=0.50,
         exposure_score=0.05
     )
 
-    ranked = engine.rank_events([remote_volcano, urban_fire])
+    ranked = engine.rank_events([remote_flood, urban_fire])
     assert ranked[0].tile_id == "urban_fire"
     assert ranked[0].priority_score > ranked[1].priority_score
 
@@ -145,14 +144,14 @@ def test_scheduler_tier1_precedence_and_carryover(tmp_path):
     events = [
         DisasterEvent("tile_1", DisasterCategory.FLOOD, 0.90, 0.80, 0.40, exposure_score=0.70),
         DisasterEvent("tile_2", DisasterCategory.WILDFIRE, 0.85, 0.70, 0.30, exposure_score=0.60),
-        DisasterEvent("tile_3", DisasterCategory.CYCLONE, 0.95, 0.90, 0.80, exposure_score=0.85),
+        DisasterEvent("tile_3", DisasterCategory.FLOOD, 0.95, 0.90, 0.80, exposure_score=0.85),
     ]
     assessments = [engine.assess_event(e) for e in events]
     scheduler.enqueue_assessments(assessments)
 
-    # Budget enough for all Tier 1 alerts (3 * 64 bytes = 192 bytes) + exactly ONE image (25 KB)
-    # Total budget = 200 bytes + 25 * 1024 bytes = 25,800 bytes
-    downlinked, summary = scheduler.simulate_pass(bandwidth_budget_bytes=26_000)
+    # Budget enough for all Tier 1 alerts (3 * 32 B = 96 B) + exactly ONE full optical tile (65,536 B)
+    # = 65,632 B; 66,000 B leaves no room for a second tile.
+    downlinked, summary = scheduler.simulate_pass(bandwidth_budget_bytes=66_000)
 
     assert summary.alerts_sent == 3
     assert summary.images_sent == 1
@@ -190,15 +189,7 @@ def test_wildfire_model_tiny_ml():
     assert ext_nbr.shape == (2, 1)
 
 
-def test_cyclone_model_tiny_ml():
-    """Verify cyclone TinyML depthwise-separable architecture and budget (<= 120 KB)."""
-    model = build_cyclone_model()
-    memory_info = calculate_model_memory(model)
-
-    assert memory_info["float32_size_kb"] <= 120.0, f"Cyclone model exceeds 120 KB: {memory_info['float32_size_kb']} KB"
-    print(f"\nCyclone Model FP32 Size: {memory_info['float32_size_kb']} KB ({memory_info['total_params']} params)")
-
-    x_rand = np.random.randint(0, 256, size=(2, 128, 128, 2), dtype=np.uint8)
-    p_cyc, intensity = model.predict(x_rand, verbose=0)
-    assert p_cyc.shape == (2, 1)
-    assert intensity.shape == (2, 1)
+def test_scope_is_floods_and_fires_only():
+    """No code in src/disasters models an out-of-scope hazard."""
+    assert not (Path(__file__).resolve().parent.parent / "src" / "disasters" / ("cy" + "clone.py")).exists()
+    assert {c.value for c in DisasterCategory} == {"flood", "wildfire"}
