@@ -50,6 +50,11 @@ Design notes:
 7. **Optical-only baseline, real pipeline:** the same optical model scores cloudy tiles on the simulated-cloud pixels. That is what a system without radar would do. `scripts/baselines.py` only approximates it by treating cloudy tiles as blind.
 8. **Permanent-water removal matters.** Subtracting the JRC layer turns 280 of 6,825 tiles (4.1%) from critical to non-critical, and permanent-water pixels stay in the denominator. Anyone rebuilding labels must do the same.
 
+## Scope (decided by Madhavan, 2026-10-31)
+
+- **In scope: floods (primary, fully measured) and forest fires (second hazard).**
+- **Out of scope: cyclones, landslides, earthquakes, volcanoes and any other hazard.** There is no dataset, label or tile-level definition of "critical" for them. No code, model, registry entry or slide for these hazards is merged. Do not describe the project as a multi-disaster or disaster-management system: it is a TinyML triage layer, with floods as the worked example and fire as the second hazard.
+
 ## Hazards (floods and forest fires)
 
 - **Floods are the primary, fully measured hazard.** Forest fires are the second hazard (decided by Madhavan). The pipeline is the same; the model, the target and the sensor story change. Fire work must not delay the flood headline plot.

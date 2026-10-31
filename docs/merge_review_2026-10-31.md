@@ -41,8 +41,11 @@ Method: file-by-file read against CONTEXT.md, byte-level checks (BOM, CRLF, size
 5. **Scope and wording.** "Multi-Disaster Detection and Intelligent Prioritisation System" with six hazards (earthquake, volcano, landslide) is not what PS 1.4 asks for and conflicts with our framing (TinyML triage layer, floods as the worked example, not a disaster-management system). Use "priority", not "risk". The scheduler's packet sizes (64 B alert, 25 to 100 KB imagery) conflict with our L0 32 B / L1 / L2 design; use `src/constants.py` and Akhilesh's scheduler.
 6. **`requirements.txt` drops the pins** and replaces them with unpinned names. Keep the pinned versions and add the new packages with versions (tensorflow 2.21.0, keras 3.15.1, scikit-learn 1.9.1, pytest were what worked in my test run).
 
-## Decision needed: cyclones
-Harish's notes and test say cyclones are excluded. Shenbaga implemented a cyclone model and marked it done. We have no cyclone dataset, no labels and no tile-level definition of "critical". My recommendation is out: keep the hazard list to floods (measured) and fires. Madhavan decides; until then no cyclone code merges.
+## Decision: cyclones are OUT (Madhavan, 2026-10-31)
+Scope is floods and forest fires only (see "Scope" in CONTEXT.md). Consequences:
+- **Shenbaga:** delete `src/disasters/cyclone.py`, and the cyclone, landslide, earthquake and volcano entries from the registry and their tests. Keep flood and wildfire only, with honest statuses. Rename or drop the "multi-disaster" framing.
+- **Harish:** keep the exclusion, but fix `test_15` so it does not search documentation files (it fails on your own notes). Test code files only, or drop the test.
+- **Agnel:** no change, except the reference doc must not list hazards outside scope.
 
 ## Order of work
 1. Agnel: items 1 to 4 first (they change `sensor_used`, which everyone downstream depends on). Tell Shenbaga and Harish when `tiles_base.csv` is regenerated.
